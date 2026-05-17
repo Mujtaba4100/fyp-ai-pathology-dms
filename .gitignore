@@ -1,0 +1,12 @@
+DEVELOPMENT_GUIDE.md
+04072213019_Ghulam_Mujtaba_FYP_1_AI_Based_EMR _Pathology_Report_Management _System.pdf
+detail.txt
+STEP_BY_STEP_IMPLEMENTATION_GUIDE.md
+*.md
+venv/
+__pycache__/
+ilovepdf_images-extracted/
+.env
+test_*
+uploads/
+PHASE_6_SETUP.txt
