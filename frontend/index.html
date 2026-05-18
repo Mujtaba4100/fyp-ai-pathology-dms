@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EMR Pathology — Phase 1–6 Demo UI</title>
+  <style>
+    body { margin: 16px; }
+    fieldset { margin: 12px 0; padding: 12px; }
+    legend { padding: 0 6px; }
+    label { display: block; margin: 8px 0 4px; }
+    input[type="text"], input[type="password"], input[type="email"], select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    textarea { min-height: 110px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .small { font-size: 0.9em; }
+    .muted { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <h1>EMR Pathology — Phase 1–6 Demo UI</h1>
+  <p class="muted small">
+    This is a lightweight testing UI for the Phase 1–6 flow: <span class="mono">upload → OCR → clean → extract</span>.
+    Upload + OCR require a JWT (register/login below).
+  </p>
+
+  <fieldset>
+    <legend>Backend</legend>
+    <label for="baseUrl">API base URL</label>
+    <input id="baseUrl" type="text" value="http://127.0.0.1:8000" />
+    <div class="actions">
+      <button id="btnHealth" type="button">Check /health</button>
+      <button id="btnClear" type="button">Clear All</button>
+    </div>
+    <pre id="healthOut" class="mono"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Auth (Phase 1)</legend>
+    <div class="row">
+      <div>
+        <h3>Register</h3>
+        <label for="regUsername">Username</label>
+        <input id="regUsername" type="text" placeholder="doctor1" />
+
+        <label for="regEmail">Email</label>
+        <input id="regEmail" type="email" placeholder="doctor1@example.com" />
+
+        <label for="regPassword">Password</label>
+        <input id="regPassword" type="password" placeholder="password" />
+
+        <label for="regRole">Role</label>
+        <select id="regRole">
+          <option value="doctor" selected>doctor</option>
+          <option value="lab_tech">lab_tech</option>
+          <option value="admin">admin</option>
+        </select>
+
+        <div class="actions">
+          <button id="btnRegister" type="button">Register</button>
+        </div>
+        <pre id="registerOut" class="mono"></pre>
+      </div>
+
+      <div>
+        <h3>Login</h3>
+        <label for="loginUsername">Username</label>
+        <input id="loginUsername" type="text" placeholder="doctor1" />
+
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" type="password" placeholder="password" />
+
+        <div class="actions">
+          <button id="btnLogin" type="button">Login</button>
+          <button id="btnLogout" type="button">Clear Token</button>
+        </div>
+
+        <label for="token">JWT Token (auto)</label>
+        <textarea id="token" class="mono" placeholder="Bearer ..." spellcheck="false"></textarea>
+
+        <pre id="loginOut" class="mono"></pre>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Upload (Phase 2)</legend>
+    <label for="uploadFile">Select file (PDF/image)</label>
+    <input id="uploadFile" type="file" />
+    <div class="actions">
+      <button id="btnUpload" type="button">Upload</button>
+    </div>
+    <label for="fileId">file_id (auto)</label>
+    <input id="fileId" type="text" class="mono" placeholder="uuid..." />
+    <pre id="uploadOut" class="mono"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>OCR (Phase 3)</legend>
+    <p class="muted small">Uses local disk copy under <span class="mono">backend/uploads/</span>. Also persists OCR text into PostgreSQL when DB is configured.</p>
+    <div class="actions">
+      <button id="btnOcr" type="button">Run OCR</button>
+    </div>
+    <label for="ocrText">OCR extracted_text</label>
+    <textarea id="ocrText" class="mono" spellcheck="false"></textarea>
+    <pre id="ocrOut" class="mono"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Clean Text (Phase 4)</legend>
+    <p class="muted small">If you include <span class="mono">file_id</span>, cleaned text is saved to PostgreSQL. If not, it behaves like the original endpoint.</p>
+    <label for="cleanInput">Input text</label>
+    <textarea id="cleanInput" class="mono" spellcheck="false"></textarea>
+    <div class="actions">
+      <button id="btnClean" type="button">Clean</button>
+    </div>
+    <label for="cleanedText">cleaned_text</label>
+    <textarea id="cleanedText" class="mono" spellcheck="false"></textarea>
+    <pre id="cleanOut" class="mono"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>LLM Extract (Phase 5)</legend>
+    <p class="muted small">Requires <span class="mono">OPENAI_API_KEY</span> set in the backend. If you include <span class="mono">file_id</span>, the structured report is saved to PostgreSQL.</p>
+    <div class="actions">
+      <button id="btnExtract" type="button">Extract Medical Data</button>
+    </div>
+    <pre id="extractOut" class="mono"></pre>
+  </fieldset>
+
+  <script>
+    const els = {
+      baseUrl: document.getElementById('baseUrl'),
+      btnHealth: document.getElementById('btnHealth'),
+      btnClear: document.getElementById('btnClear'),
+      healthOut: document.getElementById('healthOut'),
+
+      regUsername: document.getElementById('regUsername'),
+      regEmail: document.getElementById('regEmail'),
+      regPassword: document.getElementById('regPassword'),
+      regRole: document.getElementById('regRole'),
+      btnRegister: document.getElementById('btnRegister'),
+      registerOut: document.getElementById('registerOut'),
+
+      loginUsername: document.getElementById('loginUsername'),
+      loginPassword: document.getElementById('loginPassword'),
+      btnLogin: document.getElementById('btnLogin'),
+      btnLogout: document.getElementById('btnLogout'),
+      token: document.getElementById('token'),
+      loginOut: document.getElementById('loginOut'),
+
+      uploadFile: document.getElementById('uploadFile'),
+      btnUpload: document.getElementById('btnUpload'),
+      uploadOut: document.getElementById('uploadOut'),
+
+      fileId: document.getElementById('fileId'),
+
+      btnOcr: document.getElementById('btnOcr'),
+      ocrText: document.getElementById('ocrText'),
+      ocrOut: document.getElementById('ocrOut'),
+
+      cleanInput: document.getElementById('cleanInput'),
+      btnClean: document.getElementById('btnClean'),
+      cleanedText: document.getElementById('cleanedText'),
+      cleanOut: document.getElementById('cleanOut'),
+
+      btnExtract: document.getElementById('btnExtract'),
+      extractOut: document.getElementById('extractOut'),
+    };
+
+    function pretty(obj) {
+      return JSON.stringify(obj, null, 2);
+    }
+
+    function apiBase() {
+      return (els.baseUrl.value || '').replace(/\/$/, '');
+    }
+
+    function getBearer() {
+      const raw = (els.token.value || '').trim();
+      if (!raw) return '';
+      if (/^bearer\s+/i.test(raw)) return raw;
+      return 'Bearer ' + raw;
+    }
+
+    async function apiFetch(path, options = {}) {
+      const url = apiBase() + path;
+      const headers = new Headers(options.headers || {});
+
+      const bearer = getBearer();
+      if (bearer && !headers.has('Authorization')) {
+        headers.set('Authorization', bearer);
+      }
+
+      const res = await fetch(url, { ...options, headers });
+
+      const text = await res.text();
+      let data;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+
+      if (!res.ok) {
+        const err = new Error('HTTP ' + res.status);
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+
+      return data;
+    }
+
+    function clearOutputs() {
+      els.healthOut.textContent = '';
+      els.registerOut.textContent = '';
+      els.loginOut.textContent = '';
+      els.uploadOut.textContent = '';
+      els.ocrOut.textContent = '';
+      els.cleanOut.textContent = '';
+      els.extractOut.textContent = '';
+    }
+
+    function clearAll() {
+      clearOutputs();
+      els.token.value = '';
+      els.fileId.value = '';
+      els.ocrText.value = '';
+      els.cleanInput.value = '';
+      els.cleanedText.value = '';
+      els.uploadFile.value = '';
+    }
+
+    els.btnHealth.addEventListener('click', async () => {
+      els.healthOut.textContent = 'Checking...';
+      try {
+        const data = await apiFetch('/health');
+        els.healthOut.textContent = pretty(data);
+      } catch (e) {
+        els.healthOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnClear.addEventListener('click', () => {
+      clearAll();
+    });
+
+    els.btnRegister.addEventListener('click', async () => {
+      els.registerOut.textContent = 'Registering...';
+      try {
+        const payload = {
+          username: els.regUsername.value.trim(),
+          email: els.regEmail.value.trim(),
+          password: els.regPassword.value,
+          role: els.regRole.value,
+        };
+        const data = await apiFetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        els.registerOut.textContent = pretty(data);
+
+        // Convenience: copy username/password into login fields
+        // (Avoids accidental mismatch between Register and Login.)
+        els.loginUsername.value = payload.username;
+        els.loginPassword.value = payload.password;
+      } catch (e) {
+        els.registerOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnLogin.addEventListener('click', async () => {
+      els.loginOut.textContent = 'Logging in...';
+      try {
+        const payload = {
+          username: els.loginUsername.value.trim(),
+          password: els.loginPassword.value,
+        };
+        const data = await apiFetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        els.loginOut.textContent = pretty(data);
+        if (data && data.access_token) {
+          els.token.value = 'Bearer ' + data.access_token;
+        }
+      } catch (e) {
+        els.loginOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnLogout.addEventListener('click', () => {
+      els.token.value = '';
+      els.loginOut.textContent = pretty({ status: 'ok', message: 'Token cleared (client-side).' });
+    });
+
+    els.btnUpload.addEventListener('click', async () => {
+      els.uploadOut.textContent = 'Uploading...';
+      try {
+        const file = els.uploadFile.files && els.uploadFile.files[0];
+        if (!file) {
+          els.uploadOut.textContent = pretty({ error: 'Select a file first.' });
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        const data = await apiFetch('/api/upload/', {
+          method: 'POST',
+          body: fd,
+        });
+
+        els.uploadOut.textContent = pretty(data);
+        if (data && data.file_id) {
+          els.fileId.value = data.file_id;
+        }
+      } catch (e) {
+        els.uploadOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnOcr.addEventListener('click', async () => {
+      els.ocrOut.textContent = 'Running OCR...';
+      try {
+        const fileId = els.fileId.value.trim();
+        if (!fileId) {
+          els.ocrOut.textContent = pretty({ error: 'file_id is required. Upload first.' });
+          return;
+        }
+
+        const data = await apiFetch('/api/ocr/process/' + encodeURIComponent(fileId), {
+          method: 'POST',
+        });
+
+        els.ocrOut.textContent = pretty(data);
+        if (data && typeof data.extracted_text === 'string') {
+          els.ocrText.value = data.extracted_text;
+          els.cleanInput.value = data.extracted_text;
+        }
+      } catch (e) {
+        els.ocrOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnClean.addEventListener('click', async () => {
+      els.cleanOut.textContent = 'Cleaning...';
+      try {
+        const text = els.cleanInput.value;
+        if (!text.trim()) {
+          els.cleanOut.textContent = pretty({ error: 'Input text is required.' });
+          return;
+        }
+
+        const payload = {
+          text,
+          file_id: els.fileId.value.trim() || null,
+        };
+
+        const data = await apiFetch('/api/clean/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        els.cleanOut.textContent = pretty(data);
+        if (data && typeof data.cleaned_text === 'string') {
+          els.cleanedText.value = data.cleaned_text;
+        }
+      } catch (e) {
+        els.cleanOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+
+    els.btnExtract.addEventListener('click', async () => {
+      els.extractOut.textContent = 'Extracting...';
+      try {
+        const cleanedText = els.cleanedText.value;
+        if (!cleanedText.trim()) {
+          els.extractOut.textContent = pretty({ error: 'cleaned_text is required. Clean first.' });
+          return;
+        }
+
+        const payload = {
+          cleaned_text: cleanedText,
+          file_id: els.fileId.value.trim() || null,
+        };
+
+        const data = await apiFetch('/api/extract/medical-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        els.extractOut.textContent = pretty(data);
+      } catch (e) {
+        els.extractOut.textContent = pretty({ error: e.message, status: e.status, data: e.data });
+      }
+    });
+  </script>
+</body>
+</html>
