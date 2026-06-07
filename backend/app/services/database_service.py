@@ -82,12 +82,17 @@ class DatabaseService:
     @staticmethod
     def save_embedding(db: Session, file_id: str, embedding: list, text_chunk: str):
         """Save document embedding"""
-        emb = DocumentEmbedding(
-            document_id=file_id,
-            embedding=embedding,
-            text_chunk=text_chunk
-        )
-        db.add(emb)
+        emb = db.query(DocumentEmbedding).filter(DocumentEmbedding.document_id == file_id).first()
+        if emb:
+            emb.embedding = embedding
+            emb.text_chunk = text_chunk
+        else:
+            emb = DocumentEmbedding(
+                document_id=file_id,
+                embedding=embedding,
+                text_chunk=text_chunk
+            )
+            db.add(emb)
         db.commit()
         db.refresh(emb)
         return emb

@@ -29,6 +29,22 @@ async def extract_medical_data(request: ExtractRequest, db: Session = Depends(ge
                     file_id=request.file_id,
                     extraction_data=result["data"],
                 )
+
+                # Optional Phase 7 integration: store an embedding for semantic search.
+                try:
+                    from app.services.embedding_service import EmbeddingService
+
+                    embedding_service = EmbeddingService()
+                    embedding_result = embedding_service.generate_embedding(request.cleaned_text)
+                    if embedding_result.get("status") == "success":
+                        DatabaseService.save_embedding(
+                            db=db,
+                            file_id=request.file_id,
+                            embedding=embedding_result["embedding"],
+                            text_chunk=request.cleaned_text[:500],
+                        )
+                except Exception as emb_err:
+                    print(f"⚠️ Embedding generation skipped: {emb_err}")
             except Exception as db_err:
                 raise HTTPException(status_code=500, detail=f"PostgreSQL persistence failed: {db_err}")
         
