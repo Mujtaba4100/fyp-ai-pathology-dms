@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # Google AI API
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
     
+    # Groq API
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+    
     # PostgreSQL (for text extraction + embeddings)
     # If provided, this is the primary connection string (e.g., Neon hosted Postgres).
     # When set, it overrides the POSTGRES_* settings below.

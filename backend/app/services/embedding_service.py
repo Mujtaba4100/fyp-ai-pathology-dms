@@ -1,15 +1,25 @@
-from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 from app.config import settings
 import numpy as np
 
 
 class EmbeddingService:
-    """Service for generating and comparing embeddings."""
+    """Service for generating and comparing embeddings locally."""
+
+    _model_instance = None
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
-        self.model = "text-embedding-3-small"
-        self.dimension = 1536
+        self.model_name = "all-MiniLM-L6-v2"
+        self.dimension = 384
+        
+        # Cache model to avoid reloading on every request
+        if EmbeddingService._model_instance is None:
+            try:
+                EmbeddingService._model_instance = SentenceTransformer(self.model_name)
+            except Exception as e:
+                print(f"⚠️ Failed to load local SentenceTransformer: {e}")
+                
+        self.model = EmbeddingService._model_instance
 
     @staticmethod
     def _trim_text(text: str, max_chars: int = 32000) -> tuple[str, bool]:
@@ -20,7 +30,7 @@ class EmbeddingService:
         return cleaned_text, truncated
 
     def generate_embedding(self, text: str) -> dict:
-        """Generate a 1536-dim embedding for input text."""
+        """Generate a 384-dim embedding for input text locally."""
         if not text or not text.strip():
             return {
                 "status": "error",
@@ -30,35 +40,32 @@ class EmbeddingService:
                 "cost_estimate": None,
             }
 
-        if not self.client:
-            return {
-                "status": "error",
-                "message": "OpenAI API key not configured",
-                "embedding": None,
-                "dimension": 0,
-                "cost_estimate": None,
-            }
+        if not self.model:
+            try:
+                EmbeddingService._model_instance = SentenceTransformer(self.model_name)
+                self.model = EmbeddingService._model_instance
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "message": f"Local embedding model not loaded: {str(e)}",
+                    "embedding": None,
+                    "dimension": 0,
+                    "cost_estimate": None,
+                }
 
         cleaned_text, truncated = self._trim_text(text)
 
         try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=cleaned_text,
-            )
-            embedding = response.data[0].embedding
-            tokens_used = getattr(getattr(response, "usage", None), "total_tokens", None)
-            if tokens_used is None:
-                tokens_used = max(1, len(cleaned_text) // 4)
-
-            cost_estimate = f"~${(tokens_used * 0.02 / 1_000_000):.6f}"
+            # Generate embedding using local model
+            emb = self.model.encode(cleaned_text)
+            embedding = emb.tolist()
 
             return {
                 "status": "success",
                 "embedding": embedding,
                 "dimension": len(embedding),
-                "cost_estimate": cost_estimate,
-                "tokens_used": tokens_used,
+                "cost_estimate": "$0.000000 (Local - Free)",
+                "tokens_used": len(cleaned_text) // 4,
                 "truncated": truncated,
             }
         except Exception as e:

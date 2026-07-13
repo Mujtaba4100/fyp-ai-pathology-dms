@@ -43,7 +43,7 @@ class DocumentEmbedding(Base):
     
     id = Column(Integer, primary_key=True)
     document_id = Column(String(36), index=True, unique=True)
-    embedding = Column(Vector(1536))  # OpenAI embedding is 1536-dimensional
+    embedding = Column(Vector(384))  # Sentence-Transformers all-MiniLM-L6-v2 embedding is 384-dimensional
     text_chunk = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
