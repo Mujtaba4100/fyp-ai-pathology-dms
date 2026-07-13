@@ -10,3 +10,4 @@ ilovepdf_images-extracted/
 test_*
 uploads/
 PHASE_6_SETUP.txt
+verify_ai_migration.py
