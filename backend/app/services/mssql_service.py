@@ -18,12 +18,30 @@ class MSSQLService:
     
     def get_connection(self):
         """Get MS SQL Server connection"""
+        # Dynamically determine the best available SQL Server driver on the host system
+        available_drivers = pyodbc.drivers()
+        sql_drivers = [d for d in available_drivers if "SQL Server" in d]
+        
+        driver = None
+        for candidate in ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server", "SQL Server"]:
+            if candidate in sql_drivers:
+                driver = candidate
+                break
+                
+        if not driver:
+            if sql_drivers:
+                driver = sql_drivers[0]
+            else:
+                driver = "SQL Server"  # default fallback
+
         try:
-            connection_string = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={self.server},{self.port};DATABASE={self.database};UID={self.user};PWD={self.password}"
+            # ODBC Driver 18 requires TrustServerCertificate=yes for local self-signed connections
+            encrypt_params = ";TrustServerCertificate=yes" if "Driver 18" in driver else ""
+            connection_string = f"DRIVER={{{driver}}};SERVER={self.server},{self.port};DATABASE={self.database};UID={self.user};PWD={self.password}{encrypt_params}"
             conn = pyodbc.connect(connection_string)
             return conn
         except Exception as e:
-            raise Exception(f"MS SQL Connection failed: {str(e)}")
+            raise Exception(f"MS SQL Connection failed using driver '{driver}': {str(e)}")
     
     def save_document(self, file_id: str, filename: str, file_size: int, file_path: str, file_data: bytes) -> dict:
         """Save document to MS SQL Server vault
