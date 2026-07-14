@@ -42,6 +42,13 @@ class OCRService:
             # Open image
             image = Image.open(file_path)
             
+            # Preprocess image if width is low (< 1200px) to boost OCR accuracy
+            if image.width < 1200:
+                scale_factor = 3
+                new_size = (image.width * scale_factor, image.height * scale_factor)
+                image = image.convert("L")  # Convert to grayscale to remove background noise/watermark effects
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+            
             # Extract text using Tesseract OCR
             text = pytesseract.image_to_string(image)
             
@@ -58,7 +65,7 @@ class OCRService:
                 "text": text.strip(),
                 "message": "OCR completed successfully",
                 "character_count": len(text)
-            }
+              }
         
         except Exception as e:
             logger.error(f"Image OCR error: {str(e)}")

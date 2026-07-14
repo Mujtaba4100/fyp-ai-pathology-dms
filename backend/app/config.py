@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     
     # Groq API
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     
     # PostgreSQL (for text extraction + embeddings)
     # If provided, this is the primary connection string (e.g., Neon hosted Postgres).
