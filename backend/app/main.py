@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.schemas import MessageResponse, HealthResponse
-from app.routes import auth, upload, ocr, text_cleaning, llm_extraction, embeddings, search
+from app.routes import auth, upload, ocr, text_cleaning, llm_extraction, embeddings, search, chatbot
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -27,6 +27,7 @@ app.include_router(text_cleaning.router)
 app.include_router(llm_extraction.router)
 app.include_router(embeddings.router)
 app.include_router(search.router)
+app.include_router(chatbot.router)
 
 @app.get("/", response_model=MessageResponse)
 async def root():
