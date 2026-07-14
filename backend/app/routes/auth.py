@@ -6,8 +6,16 @@ import os
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Mock in-memory database (will be replaced with real SQL database in Phase 6)
-fake_users_db = {}
+# Mock in-memory database seeded with default credentials
+fake_users_db = {
+    "admin": {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@example.com",
+        "password_hash": get_password_hash("admin123"),
+        "role": "admin"
+    }
+}
 
 @router.post("/register", response_model=UserOut)
 async def register(user_data: UserRegister):

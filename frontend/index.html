@@ -11,7 +11,31 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="dashboard-container">
+    <!-- Login Modal Overlay -->
+    <div id="login-overlay" class="login-overlay">
+        <div class="login-card">
+            <div class="login-header">
+                <span class="login-logo">🧬</span>
+                <h2>EMR Pathology Portal</h2>
+                <p>Please authenticate to access the Clinical Dashboard</p>
+            </div>
+            <div class="login-form">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="login-username" placeholder="Enter username...">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="login-password" placeholder="Enter password...">
+                </div>
+                <button class="btn btn-primary btn-block" onclick="submitLogin()">Authenticate</button>
+                <div class="divider"><span>OR</span></div>
+                <button class="btn btn-secondary btn-block" onclick="quickLogin()">Quick Login (Demo Admin)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-container" style="display: none;" id="main-dashboard">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="brand">
@@ -27,6 +51,9 @@
                 </a>
                 <a href="#" class="nav-item" onclick="switchTab('chat')">
                     <span class="nav-icon">💬</span> AI Assistant
+                </a>
+                <a href="#" class="nav-item" onclick="logoutUser()" style="margin-top: 20px; color: #fca5a5;">
+                    <span class="nav-icon">🚪</span> Logout
                 </a>
             </nav>
             <div class="status-indicator">

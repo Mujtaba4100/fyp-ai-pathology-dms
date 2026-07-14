@@ -1,5 +1,76 @@
 const API_BASE = "http://localhost:8000/api";
 
+// Authentication helpers
+function getAuthHeader() {
+    const token = localStorage.getItem("emr_auth_token");
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+}
+
+// Session check on page load
+document.addEventListener("DOMContentLoaded", () => {
+    const token = localStorage.getItem("emr_auth_token");
+    if (token) {
+        showDashboard();
+    } else {
+        showLogin();
+    }
+});
+
+function showLogin() {
+    document.getElementById("login-overlay").style.display = "flex";
+    document.getElementById("main-dashboard").style.display = "none";
+}
+
+function showDashboard() {
+    document.getElementById("login-overlay").style.display = "none";
+    document.getElementById("main-dashboard").style.display = "flex";
+}
+
+async function submitLogin() {
+    const userField = document.getElementById("login-username");
+    const passField = document.getElementById("login-password");
+    
+    const username = userField.value.trim();
+    const password = passField.value.trim();
+    
+    if (!username || !password) {
+        alert("Please enter both username and password.");
+        return;
+    }
+    await executeLogin(username, password);
+}
+
+async function quickLogin() {
+    await executeLogin("admin", "admin123");
+}
+
+async function executeLogin(username, password) {
+    try {
+        const response = await fetch(`${API_BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+        
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || "Invalid login credentials.");
+        }
+        
+        const data = await response.json();
+        localStorage.setItem("emr_auth_token", data.access_token);
+        showDashboard();
+        
+    } catch (err) {
+        alert(`Authentication failed: ${err.message}`);
+    }
+}
+
+function logoutUser() {
+    localStorage.removeItem("emr_auth_token");
+    showLogin();
+}
+
 // 1. Tab switching logic
 function switchTab(tabName) {
     // Switch Sidebar items active state
@@ -70,6 +141,7 @@ async function handleFileUpload(file) {
         
         const uploadResponse = await fetch(`${API_BASE}/upload/`, {
             method: "POST",
+            headers: { ...getAuthHeader() },
             body: formData
         });
         
@@ -85,7 +157,8 @@ async function handleFileUpload(file) {
         // --- STEP 2: RUN OCR ---
         progressPercent.textContent = "Step 2: Processing OCR (Reading document)...";
         const ocrResponse = await fetch(`${API_BASE}/ocr/process/${fileId}`, {
-            method: "POST"
+            method: "POST",
+            headers: { ...getAuthHeader() }
         });
         if (!ocrResponse.ok) throw new Error("OCR Processing failed.");
         const ocrData = await ocrResponse.json();
