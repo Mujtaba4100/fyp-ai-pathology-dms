@@ -17,8 +17,8 @@ class LLMExtractor:
     @staticmethod
     def get_extraction_prompt(clean_text: str) -> str:
         """Generate extraction prompt for medical text"""
-        return f"""You are a medical data extraction expert. Extract medical information from the following pathology report.
-
+        return f"""You are a medical data extraction expert. Extract medical information from the following pathology report text.
+        
 Return the extracted data as JSON with the following structure:
 {{
     "patient_id": "extracted or null",
@@ -39,11 +39,14 @@ Return the extracted data as JSON with the following structure:
     "summary": "brief summary of findings"
 }}
 
-Important rules:
-1. Return ONLY valid JSON, no other text
-2. If a field is not found, use null
-3. is_abnormal should be true if value is outside reference range
-4. Be accurate and don't hallucinate data
+Strict Rules:
+1. Return ONLY valid JSON, no other text.
+2. If a field is not found, use null.
+3. is_abnormal must be true if the extracted value lies outside the extracted reference range.
+4. Extract values, reference ranges, and units EXACTLY as they appear in the text.
+5. DO NOT use standard biological or physiological reference ranges from your general knowledge base to "correct", override, or substitute the actual values, units, or ranges written in the report. Always extract exactly what is in the provided text, even if it looks misplaced, unusual, or clinically incorrect.
+6. Pay close attention to column layout and spacing to avoid merging separate numbers from adjacent columns (e.g., do not combine a value column and a reference range column into a single number).
+7. Do not hallucinate or guess any data.
 
 Medical Report Text:
 {clean_text}
