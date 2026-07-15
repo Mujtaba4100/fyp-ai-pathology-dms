@@ -11,3 +11,5 @@ test_*
 uploads/
 PHASE_6_SETUP.txt
 verify_ai_migration.py
+reset_db.py
+verify_databases.py

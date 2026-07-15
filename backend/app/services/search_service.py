@@ -73,6 +73,7 @@ class SearchService:
             reports = (
                 db.query(PathologyReport)
                 .filter(
+                    (PathologyReport.patient_name.ilike(f"%{keyword}%")) |
                     (PathologyReport.diagnosis.ilike(f"%{keyword}%")) |
                     (PathologyReport.summary.ilike(f"%{keyword}%")) |
                     (PathologyReport.test_type.ilike(f"%{keyword}%")) |

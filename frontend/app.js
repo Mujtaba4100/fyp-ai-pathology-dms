@@ -117,8 +117,46 @@ dropZone.addEventListener('drop', (e) => {
     }
 });
 
+// Resolution validation helper for low-res images
+function validateImageResolution(file) {
+    return new Promise((resolve) => {
+        if (!file.type.startsWith("image/")) {
+            resolve(true);
+            return;
+        }
+        
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        
+        img.onload = function() {
+            URL.revokeObjectURL(img.src);
+            if (this.width < 1000) {
+                const proceed = confirm(
+                    `⚠️ WARNING: Low Resolution Image\n\n` +
+                    `The selected image is only ${this.width}x${this.height} pixels (less than 1000px wide).\n` +
+                    `Low resolution can lead to OCR character recognition errors.\n\n` +
+                    `We recommend uploading a scan or photo of at least 1500px wide.\n\n` +
+                    `Do you want to proceed anyway?`
+                );
+                resolve(proceed);
+            } else {
+                resolve(true);
+            }
+        };
+        
+        img.onerror = function() {
+            URL.revokeObjectURL(img.src);
+            resolve(true);
+        };
+    });
+}
+
 // Complete automated extraction pipeline
 async function handleFileUpload(file) {
+    // Perform client-side quality check
+    const proceed = await validateImageResolution(file);
+    if (!proceed) return;
+
     const progressContainer = document.getElementById('upload-progress');
     const progressFilename = document.getElementById('progress-filename');
     const progressPercent = document.getElementById('progress-percent');
@@ -190,7 +228,7 @@ async function handleFileUpload(file) {
         const extractResponse = await fetch(`${API_BASE}/extract/medical-data`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cleaned_text: cleanedText })
+            body: JSON.stringify({ cleaned_text: cleanedText, file_id: fileId })
         });
         if (!extractResponse.ok) throw new Error("LLM Extraction failed.");
         const extractData = await extractResponse.json();

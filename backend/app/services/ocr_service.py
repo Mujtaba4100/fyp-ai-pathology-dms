@@ -1,6 +1,6 @@
 import pytesseract
 from pdf2image import convert_from_path
-from PIL import Image
+from PIL import Image, ImageEnhance
 import os
 from pathlib import Path
 import logging
@@ -48,6 +48,9 @@ class OCRService:
                 new_size = (image.width * scale_factor, image.height * scale_factor)
                 image = image.convert("L")  # Convert to grayscale to remove background noise/watermark effects
                 image = image.resize(new_size, Image.Resampling.LANCZOS)
+                # Boost contrast and sharpen text boundaries for better OCR scanning
+                image = ImageEnhance.Contrast(image).enhance(2.0)
+                image = ImageEnhance.Sharpness(image).enhance(2.0)
             
             # Extract text using Tesseract OCR
             text = pytesseract.image_to_string(image)
