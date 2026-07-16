@@ -35,19 +35,19 @@ Return the extracted data as JSON with the following structure:
             "is_abnormal": true/false
         }
     ],
-    "diagnosis": "primary clinical diagnosis/interpretation details if mentioned",
-    "recommendations": "recommendations or urgent checkup advice if mentioned",
-    "summary": "brief summary of findings or interpretation"
+    "diagnosis": "primary clinical diagnosis/interpretation details if mentioned on the report. If not explicitly written on the report, provide a brief AI clinical diagnosis or assessment based on the extracted findings (e.g., identify if findings indicate anemia, mild thrombocytopenia, or normal results).",
+    "recommendations": "recommendations or urgent checkup advice if mentioned on the report. If not explicitly written, provide brief recommendations based on any abnormal values (e.g., 'Consult physician for abnormal hemoglobin levels' or 'None needed').",
+    "summary": "a brief clinical summary of findings. Highlight any values that are out of range and explain their potential clinical meaning."
 }
 
 Strict Rules:
 1. Return ONLY valid JSON, no other text.
-2. If a field is not found, use null.
+2. If a patient detail or test value is not found, use null.
 3. is_abnormal must be true if the extracted value lies outside the extracted reference range.
 4. Extract values, reference ranges, and units EXACTLY as they appear visually in the image.
 5. DO NOT use standard reference ranges from your general knowledge base to "correct", override, or substitute the actual values, units, or ranges written in the report. Always extract exactly what is visible in the provided image.
 6. Make sure to capture ALL parameters in the findings table. Do not miss any rows!
-7. Do not hallucinate or guess any data.
+7. Do not hallucinate or guess any data for the patient info, test names, values, or reference ranges.
 """
 
     @staticmethod
@@ -70,9 +70,9 @@ Return the extracted data as JSON with the following structure:
             "is_abnormal": true/false
         }}
     ],
-    "diagnosis": "primary diagnosis if mentioned",
-    "recommendations": "recommendations or notes",
-    "summary": "brief summary of findings"
+    "diagnosis": "primary diagnosis if mentioned on the report. If not explicitly written, provide a brief AI clinical diagnosis or assessment based on the extracted findings (e.g., identify if findings indicate anemia, mild thrombocytopenia, or normal results).",
+    "recommendations": "recommendations or notes if mentioned. If not explicitly written, provide brief recommendations based on any abnormal values (e.g., 'Consult physician for abnormal hemoglobin levels' or 'None needed').",
+    "summary": "a brief clinical summary of findings. Highlight any values that are out of range and explain their potential clinical meaning."
 }}
 
 Strict Rules:

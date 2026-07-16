@@ -77,7 +77,34 @@
                         <h2 class="card-title">Ingest Report</h2>
                         <p class="card-desc">Drag and drop pathology reports (PDF, PNG, JPG) to process medical data</p>
                         
-                        <div class="upload-zone" id="drop-zone">
+                        <!-- Extraction Method Selector -->
+                        <div class="extraction-mode-selector">
+                            <label class="mode-title">Extraction Method</label>
+                            <div class="mode-toggle-container">
+                                <label id="mode-ocr-label" class="mode-label active">
+                                    <input type="radio" name="extraction-mode" value="ocr" checked style="display: none;" onchange="updateModeUI()">
+                                    🔍 Standard (OCR + Text LLM)
+                                </label>
+                                <label id="mode-vision-label" class="mode-label">
+                                    <input type="radio" name="extraction-mode" value="vision" style="display: none;" onchange="updateModeUI()">
+                                    👁️ Vision LLM (Llama-4)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-zone" id="drop-zone" style="position: relative;">
+                            <!-- File Preview Container -->
+                            <div id="file-preview-container">
+                                <img id="uploaded-image-preview" src="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                                <div id="pdf-preview-icon" style="display: none; flex-direction: column; align-items: center; gap: 0.5rem;">
+                                    <span style="font-size: 3rem;">📕</span>
+                                    <span id="pdf-preview-name" style="font-size: 0.85rem; color: var(--text-secondary); max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+                                </div>
+                                <div class="preview-overlay" onclick="triggerFileInput()">
+                                    Click or Drag to Change File
+                                </div>
+                            </div>
+
                             <span class="upload-large-icon">📄</span>
                             <p class="upload-text">Select or drag file here</p>
                             <span class="upload-formats">Supports PDF, JPG, PNG, BMP (Max 10MB)</span>

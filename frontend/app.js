@@ -158,6 +158,26 @@ async function handleFileUpload(file) {
     const proceed = await validateImageResolution(file);
     if (!proceed) return;
 
+    // Show File Preview inside the drop zone
+    const previewContainer = document.getElementById('file-preview-container');
+    const imagePreview = document.getElementById('uploaded-image-preview');
+    const pdfIcon = document.getElementById('pdf-preview-icon');
+    const pdfName = document.getElementById('pdf-preview-name');
+    
+    if (file.type.startsWith('image/')) {
+        imagePreview.src = URL.createObjectURL(file);
+        imagePreview.style.display = 'block';
+        pdfIcon.style.display = 'none';
+        previewContainer.style.display = 'flex';
+    } else if (file.type === 'application/pdf') {
+        pdfName.textContent = file.name;
+        pdfIcon.style.display = 'flex';
+        imagePreview.style.display = 'none';
+        previewContainer.style.display = 'flex';
+    } else {
+        previewContainer.style.display = 'none';
+    }
+
     const progressContainer = document.getElementById('upload-progress');
     const progressFilename = document.getElementById('progress-filename');
     const progressPercent = document.getElementById('progress-percent');
@@ -194,45 +214,50 @@ async function handleFileUpload(file) {
         const fileId = uploadData.file_id;
         currentFileId = fileId;
         
-        // --- STEP 2: RUN OCR ---
-        progressPercent.textContent = "Step 2: Processing OCR (Reading document)...";
-        const ocrResponse = await fetch(`${API_BASE}/ocr/process/${fileId}`, {
-            method: "POST",
-            headers: { ...getAuthHeader() }
-        });
-        if (!ocrResponse.ok) throw new Error("OCR Processing failed.");
-        const ocrData = await ocrResponse.json();
+        // Read user-selected extraction mode from frontend toggle
+        const selectedMode = document.querySelector('input[name="extraction-mode"]:checked').value;
+        const useVision = selectedMode === "vision";
         
-        if (ocrData.status !== "success") {
-            throw new Error(ocrData.error_message || "OCR extraction failed.");
-        }
+        let cleanedText = "";
         
-        const rawText = ocrData.extracted_text;
+        if (!useVision) {
+            // --- STEP 2: RUN OCR ---
+            progressPercent.textContent = "Step 2: Processing OCR (Reading document)...";
+            const ocrResponse = await fetch(`${API_BASE}/ocr/process/${fileId}`, {
+                method: "POST",
+                headers: { ...getAuthHeader() }
+            });
+            if (!ocrResponse.ok) throw new Error("OCR Processing failed.");
+            const ocrData = await ocrResponse.json();
+            
+            if (ocrData.status !== "success") {
+                throw new Error(ocrData.error_message || "OCR extraction failed.");
+            }
+            
+            const rawText = ocrData.extracted_text;
 
-        // --- STEP 3: CLEAN TEXT ---
-        progressPercent.textContent = "Step 3: Cleaning & normalizing medical terms...";
-        const cleanResponse = await fetch(`${API_BASE}/clean/text`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: rawText })
-        });
-        if (!cleanResponse.ok) throw new Error("Text cleaning failed.");
-        const cleanData = await cleanResponse.json();
-        
-        if (cleanData.status !== "success") {
-            throw new Error(cleanData.message || "Text cleaning failed.");
+            // --- STEP 3: CLEAN TEXT ---
+            progressPercent.textContent = "Step 3: Cleaning & normalizing medical terms...";
+            const cleanResponse = await fetch(`${API_BASE}/clean/text`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: rawText })
+            });
+            if (!cleanResponse.ok) throw new Error("Text cleaning failed.");
+            const cleanData = await cleanResponse.json();
+            
+            if (cleanData.status !== "success") {
+                throw new Error(cleanData.message || "Text cleaning failed.");
+            }
+            
+            cleanedText = cleanData.cleaned_text;
+        } else {
+            console.log(`[AI Pipeline] Bypassing Standard OCR. Routing directly to Llama-4 Vision API.`);
         }
-        
-        const cleanedText = cleanData.cleaned_text;
 
         // --- STEP 4: HYBRID OCR/VISION EXTRACTION ---
         progressPercent.textContent = "Step 4: Parsing medical data using Hybrid OCR/Vision AI...";
-        
-        // Automatic fallback if OCR word confidence is low (< 65%)
-        const lowConfidence = ocrData.average_confidence !== undefined && ocrData.average_confidence !== null && ocrData.average_confidence < 65.0;
-        if (lowConfidence) {
-            console.log(`[AI Fallback] Low OCR confidence (${ocrData.average_confidence.toFixed(1)}%). Routing to Llama-4 Vision LLM.`);
-        }
+        console.log(`[AI Pipeline] Mode selected: ${selectedMode.toUpperCase()} (force_vision: ${useVision})`);
         
         const extractResponse = await fetch(`${API_BASE}/extract/process-hybrid`, {
             method: "POST",
@@ -243,7 +268,7 @@ async function handleFileUpload(file) {
             body: JSON.stringify({ 
                 ocr_text: cleanedText, 
                 file_id: fileId,
-                force_vision: lowConfidence
+                force_vision: useVision
             })
         });
         if (!extractResponse.ok) throw new Error("Hybrid Extraction failed.");
@@ -614,3 +639,21 @@ async function forceVisionExtraction() {
         alert(`Vision Extraction Error: ${err.message}`);
     }
 }
+
+// Toggle UI layout classes when switching Standard vs Vision mode
+function updateModeUI() {
+    const selectedMode = document.querySelector('input[name="extraction-mode"]:checked').value;
+    const ocrLabel = document.getElementById("mode-ocr-label");
+    const visionLabel = document.getElementById("mode-vision-label");
+    
+    if (selectedMode === "ocr") {
+        ocrLabel.classList.add("active");
+        visionLabel.classList.remove("active");
+    } else {
+        visionLabel.classList.add("active");
+        ocrLabel.classList.remove("active");
+    }
+}
+
+// Make sure updateModeUI is global
+window.updateModeUI = updateModeUI;
