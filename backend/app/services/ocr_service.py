@@ -7,14 +7,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class OCRService:
     """Service for OCR processing of images and PDFs"""
-    
+
     UPLOAD_FOLDER = "uploads"
     # Windows path for Tesseract - will use system PATH if not found
     TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     ALTERNATIVE_PATH = r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"
-    
+
     @staticmethod
     def _find_tesseract():
         """Find Tesseract installation"""
@@ -29,7 +30,7 @@ class OCRService:
                 return None  # Already in PATH
             except Exception:
                 return None
-    
+
     @staticmethod
     def process_image(file_path: str) -> dict:
         """Extract text from image using Tesseract"""
@@ -38,49 +39,53 @@ class OCRService:
             tesseract_path = OCRService._find_tesseract()
             if tesseract_path:
                 pytesseract.pytesseract.pytesseract_cmd = tesseract_path
-            
+
             # Open image
             image = Image.open(file_path)
-            
+
             # Preprocess image if width is low (< 1200px) to boost OCR accuracy
             if image.width < 1200:
                 scale_factor = 3
                 new_size = (image.width * scale_factor, image.height * scale_factor)
-                image = image.convert("L")  # Convert to grayscale to remove background noise/watermark effects
+                image = image.convert(
+                    "L"
+                )  # Convert to grayscale to remove background noise/watermark effects
                 image = image.resize(new_size, Image.Resampling.LANCZOS)
                 # Boost contrast and sharpen text boundaries for better OCR scanning
                 image = ImageEnhance.Contrast(image).enhance(2.0)
                 image = ImageEnhance.Sharpness(image).enhance(2.0)
-            
+
             # Extract text using Tesseract OCR
             text = pytesseract.image_to_string(image)
-            
+
             avg_conf = 100.0
             try:
-                data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+                data = pytesseract.image_to_data(
+                    image, output_type=pytesseract.Output.DICT
+                )
                 confidences = [float(c) for c in data.get("conf", []) if float(c) != -1]
                 if confidences:
                     avg_conf = sum(confidences) / len(confidences)
             except Exception as conf_err:
                 logger.warning(f"Could not calculate OCR confidence: {conf_err}")
-            
+
             if not text or text.strip() == "":
                 return {
                     "status": "no_text",
                     "text": "",
                     "message": "No text found in image",
                     "character_count": 0,
-                    "average_confidence": 0.0
+                    "average_confidence": 0.0,
                 }
-            
+
             return {
                 "status": "success",
                 "text": text.strip(),
                 "message": "OCR completed successfully",
                 "character_count": len(text),
-                "average_confidence": avg_conf
+                "average_confidence": avg_conf,
             }
-        
+
         except Exception as e:
             logger.error(f"Image OCR error: {str(e)}")
             return {
@@ -89,9 +94,9 @@ class OCRService:
                 "message": str(e),
                 "error": "Image processing failed",
                 "character_count": 0,
-                "average_confidence": 0.0
+                "average_confidence": 0.0,
             }
-    
+
     @staticmethod
     def process_pdf(file_path: str) -> dict:
         """Extract text from PDF using Tesseract on each page"""
@@ -100,13 +105,13 @@ class OCRService:
             tesseract_path = OCRService._find_tesseract()
             if tesseract_path:
                 pytesseract.pytesseract.pytesseract_cmd = tesseract_path
-            
+
             # Convert PDF to images (high DPI for better OCR)
             images = convert_from_path(file_path, dpi=200)
-            
+
             all_text = ""
             page_texts = []
-            
+
             # Process each page
             for page_num, image in enumerate(images, 1):
                 # Extract text from page
@@ -114,24 +119,24 @@ class OCRService:
                 if page_text.strip():
                     page_texts.append(f"--- Page {page_num} ---\n{page_text}")
                     all_text += f"\n--- Page {page_num} ---\n{page_text}"
-            
+
             if not all_text or all_text.strip() == "":
                 return {
                     "status": "no_text",
                     "text": "",
                     "message": f"No text found in PDF ({len(images)} pages processed)",
                     "character_count": 0,
-                    "page_count": len(images)
+                    "page_count": len(images),
                 }
-            
+
             return {
                 "status": "success",
                 "text": all_text.strip(),
                 "message": f"PDF OCR completed successfully ({len(images)} pages)",
                 "character_count": len(all_text),
-                "page_count": len(images)
+                "page_count": len(images),
             }
-        
+
         except Exception as e:
             logger.error(f"PDF OCR error: {str(e)}")
             return {
@@ -139,9 +144,9 @@ class OCRService:
                 "text": "",
                 "message": str(e),
                 "error": "PDF processing failed",
-                "character_count": 0
+                "character_count": 0,
             }
-    
+
     @staticmethod
     def process_file(file_path: str) -> dict:
         """Auto-detect file type and process accordingly"""
@@ -151,11 +156,11 @@ class OCRService:
                 "text": "",
                 "message": "File not found",
                 "error": "File does not exist",
-                "character_count": 0
+                "character_count": 0,
             }
-        
+
         file_extension = Path(file_path).suffix.lower()
-        
+
         if file_extension == ".pdf":
             return OCRService.process_pdf(file_path)
         elif file_extension in [".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp"]:
@@ -166,5 +171,5 @@ class OCRService:
                 "text": "",
                 "message": f"File type {file_extension} not supported",
                 "error": "Unsupported file format",
-                "character_count": 0
+                "character_count": 0,
             }

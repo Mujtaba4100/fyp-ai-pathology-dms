@@ -3,6 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.models.database_models import Base, Document, PathologyReport, User
 
+
 def _normalize_database_url(url: str) -> str:
     """Normalize common Postgres URL variants for SQLAlchemy."""
     url = (url or "").strip()
@@ -37,6 +38,7 @@ engine = create_engine(DATABASE_URL, echo=False)
 # Create session
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_db():
     """Dependency to get database session"""
     db = SessionLocal()
@@ -44,6 +46,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def init_db():
     """Initialize database tables"""
@@ -75,6 +78,7 @@ def init_db():
     except Exception as e:
         print(f"Database initialization error: {e}")
         return False
+
 
 # Create tables on startup/import
 init_db()

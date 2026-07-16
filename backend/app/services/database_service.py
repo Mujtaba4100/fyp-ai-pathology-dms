@@ -1,27 +1,34 @@
 from sqlalchemy.orm import Session
-from app.models.database_models import Document, PathologyReport, DocumentEmbedding, User
+from app.models.database_models import (
+    Document,
+    PathologyReport,
+    DocumentEmbedding,
+    User,
+)
 from datetime import datetime
 import json
 
+
 class DatabaseService:
     """Service for database operations"""
-    
+
     @staticmethod
-    def save_document(db: Session, file_id: str, filename: str, file_size: int, file_type: str) -> Document:
+    def save_document(
+        db: Session, file_id: str, filename: str, file_size: int, file_type: str
+    ) -> Document:
         """Save document metadata"""
         doc = Document(
-            file_id=file_id,
-            filename=filename,
-            file_size=file_size,
-            file_type=file_type
+            file_id=file_id, filename=filename, file_size=file_size, file_type=file_type
         )
         db.add(doc)
         db.commit()
         db.refresh(doc)
         return doc
-    
+
     @staticmethod
-    def save_raw_text(db: Session, file_id: str, raw_text: str, status: str = "completed"):
+    def save_raw_text(
+        db: Session, file_id: str, raw_text: str, status: str = "completed"
+    ):
         """Save OCR extracted text"""
         doc = db.query(Document).filter(Document.file_id == file_id).first()
         if doc:
@@ -31,7 +38,7 @@ class DatabaseService:
             db.refresh(doc)
             return doc
         return None
-    
+
     @staticmethod
     def save_cleaned_text(db: Session, file_id: str, cleaned_text: str):
         """Save cleaned text"""
@@ -42,9 +49,11 @@ class DatabaseService:
             db.refresh(doc)
             return doc
         return None
-    
+
     @staticmethod
-    def save_pathology_report(db: Session, file_id: str, extraction_data: dict) -> PathologyReport:
+    def save_pathology_report(
+        db: Session, file_id: str, extraction_data: dict
+    ) -> PathologyReport:
         """Save extracted pathology report data"""
         test_date_value = extraction_data.get("test_date")
         parsed_test_date = None
@@ -66,7 +75,7 @@ class DatabaseService:
             findings=json.dumps(extraction_data.get("findings", [])),
             diagnosis=extraction_data.get("diagnosis"),
             recommendations=extraction_data.get("recommendations"),
-            summary=extraction_data.get("summary", "")
+            summary=extraction_data.get("summary", ""),
         )
         db.add(report)
 
@@ -78,64 +87,75 @@ class DatabaseService:
         db.commit()
         db.refresh(report)
         return report
-    
+
     @staticmethod
     def save_embedding(db: Session, file_id: str, embedding: list, text_chunk: str):
         """Save document embedding"""
-        emb = db.query(DocumentEmbedding).filter(DocumentEmbedding.document_id == file_id).first()
+        emb = (
+            db.query(DocumentEmbedding)
+            .filter(DocumentEmbedding.document_id == file_id)
+            .first()
+        )
         if emb:
             emb.embedding = embedding
             emb.text_chunk = text_chunk
         else:
             emb = DocumentEmbedding(
-                document_id=file_id,
-                embedding=embedding,
-                text_chunk=text_chunk
+                document_id=file_id, embedding=embedding, text_chunk=text_chunk
             )
             db.add(emb)
         db.commit()
         db.refresh(emb)
         return emb
-    
+
     @staticmethod
     def get_document(db: Session, file_id: str):
         """Get document by file ID"""
         return db.query(Document).filter(Document.file_id == file_id).first()
-    
+
     @staticmethod
     def list_documents(db: Session, limit: int = 10):
         """List all documents"""
-        return db.query(Document).order_by(Document.upload_date.desc()).limit(limit).all()
-    
+        return (
+            db.query(Document).order_by(Document.upload_date.desc()).limit(limit).all()
+        )
+
     @staticmethod
     def get_pathology_report(db: Session, file_id: str):
         """Get pathology report by file ID"""
-        return db.query(PathologyReport).filter(PathologyReport.document_id == file_id).first()
-    
+        return (
+            db.query(PathologyReport)
+            .filter(PathologyReport.document_id == file_id)
+            .first()
+        )
+
     @staticmethod
     def get_embedding(db: Session, file_id: str):
         """Get embedding by file ID"""
-        return db.query(DocumentEmbedding).filter(DocumentEmbedding.document_id == file_id).first()
-    
+        return (
+            db.query(DocumentEmbedding)
+            .filter(DocumentEmbedding.document_id == file_id)
+            .first()
+        )
+
     @staticmethod
-    def save_user(db: Session, username: str, email: str, password_hash: str, role: str = "doctor") -> User:
+    def save_user(
+        db: Session, username: str, email: str, password_hash: str, role: str = "doctor"
+    ) -> User:
         """Save user to database"""
         user = User(
-            username=username,
-            email=email,
-            password_hash=password_hash,
-            role=role
+            username=username, email=email, password_hash=password_hash, role=role
         )
         db.add(user)
         db.commit()
         db.refresh(user)
         return user
-    
+
     @staticmethod
     def get_user_by_username(db: Session, username: str):
         """Get user by username"""
         return db.query(User).filter(User.username == username).first()
-    
+
     @staticmethod
     def get_user_by_email(db: Session, email: str):
         """Get user by email"""

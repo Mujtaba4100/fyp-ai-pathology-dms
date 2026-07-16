@@ -1,4 +1,5 @@
 import os
+
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 
@@ -15,14 +16,14 @@ class EmbeddingService:
     def __init__(self):
         self.model_name = "all-MiniLM-L6-v2"
         self.dimension = 384
-        
+
         # Cache model to avoid reloading on every request
         if EmbeddingService._model_instance is None:
             try:
                 EmbeddingService._model_instance = SentenceTransformer(self.model_name)
             except Exception as e:
                 print(f"[WARN] Failed to load local SentenceTransformer: {e}")
-                
+
         self.model = EmbeddingService._model_instance
 
     @staticmethod

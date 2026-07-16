@@ -40,7 +40,9 @@ async def generate_embedding(request: EmbeddingRequest, db: Session = Depends(ge
                 text_chunk=request.text[:500],
             )
         except Exception as db_err:
-            raise HTTPException(status_code=500, detail=f"PostgreSQL persistence failed: {db_err}")
+            raise HTTPException(
+                status_code=500, detail=f"PostgreSQL persistence failed: {db_err}"
+            )
 
     return result
 
@@ -52,11 +54,15 @@ async def calculate_similarity(request: SimilarityRequest):
 
     emb1 = service.generate_embedding(request.text1)
     if emb1.get("status") != "success":
-        raise HTTPException(status_code=500, detail=emb1.get("message", "Failed to embed text1"))
+        raise HTTPException(
+            status_code=500, detail=emb1.get("message", "Failed to embed text1")
+        )
 
     emb2 = service.generate_embedding(request.text2)
     if emb2.get("status") != "success":
-        raise HTTPException(status_code=500, detail=emb2.get("message", "Failed to embed text2"))
+        raise HTTPException(
+            status_code=500, detail=emb2.get("message", "Failed to embed text2")
+        )
 
     similarity_score = service.cosine_similarity(emb1["embedding"], emb2["embedding"])
 
@@ -71,11 +77,15 @@ async def calculate_similarity(request: SimilarityRequest):
 async def test_embedding():
     """Generate a sample embedding for verification."""
     service = EmbeddingService()
-    sample_text = "Patient hemoglobin elevated at 18 g/dL with suspected anemia follow-up."
+    sample_text = (
+        "Patient hemoglobin elevated at 18 g/dL with suspected anemia follow-up."
+    )
     result = service.generate_embedding(sample_text)
 
     if result.get("status") != "success":
-        raise HTTPException(status_code=500, detail=result.get("message", "Test embedding failed"))
+        raise HTTPException(
+            status_code=500, detail=result.get("message", "Test embedding failed")
+        )
 
     return {
         "status": "success",

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.models.database_models import DocumentEmbedding, PathologyReport
 from app.services.embedding_service import EmbeddingService
 
+
 class SearchService:
     """Service for performing semantic and keyword searches on medical documents."""
 
@@ -15,9 +16,9 @@ class SearchService:
                 return {
                     "status": "error",
                     "message": f"Query embedding generation failed: {emb_res.get('message')}",
-                    "results": []
+                    "results": [],
                 }
-            
+
             query_embedding = emb_res["embedding"]
 
             # 2. Perform distance search using pgvector's native l2_distance operator
@@ -34,36 +35,42 @@ class SearchService:
             for doc_emb, distance in similar_embeddings:
                 # Convert distance to similarity score: 1 / (1 + distance)
                 similarity = 1 / (1 + float(distance))
-                
-                # Fetch matching pathology report
-                report = db.query(PathologyReport).filter(
-                    PathologyReport.document_id == doc_emb.document_id
-                ).first()
 
-                results.append({
-                    "document_id": doc_emb.document_id,
-                    "similarity_score": round(similarity, 4),
-                    "distance": round(float(distance), 4),
-                    "text_preview": doc_emb.text_chunk[:200] if doc_emb.text_chunk else "",
-                    "patient_name": report.patient_name if report else "Unknown",
-                    "patient_id": report.patient_id if report else "Unknown",
-                    "test_type": report.test_type if report else "Unknown",
-                    "diagnosis": report.diagnosis if report else "Unknown",
-                    "summary": report.summary if report else "No summary"
-                })
+                # Fetch matching pathology report
+                report = (
+                    db.query(PathologyReport)
+                    .filter(PathologyReport.document_id == doc_emb.document_id)
+                    .first()
+                )
+
+                results.append(
+                    {
+                        "document_id": doc_emb.document_id,
+                        "similarity_score": round(similarity, 4),
+                        "distance": round(float(distance), 4),
+                        "text_preview": doc_emb.text_chunk[:200]
+                        if doc_emb.text_chunk
+                        else "",
+                        "patient_name": report.patient_name if report else "Unknown",
+                        "patient_id": report.patient_id if report else "Unknown",
+                        "test_type": report.test_type if report else "Unknown",
+                        "diagnosis": report.diagnosis if report else "Unknown",
+                        "summary": report.summary if report else "No summary",
+                    }
+                )
 
             return {
                 "status": "success",
                 "query": query_text,
                 "total_results": len(results),
-                "results": results
+                "results": results,
             }
 
         except Exception as e:
             return {
                 "status": "error",
                 "message": f"Semantic search failed: {str(e)}",
-                "results": []
+                "results": [],
             }
 
     @staticmethod
@@ -73,11 +80,11 @@ class SearchService:
             reports = (
                 db.query(PathologyReport)
                 .filter(
-                    (PathologyReport.patient_name.ilike(f"%{keyword}%")) |
-                    (PathologyReport.diagnosis.ilike(f"%{keyword}%")) |
-                    (PathologyReport.summary.ilike(f"%{keyword}%")) |
-                    (PathologyReport.test_type.ilike(f"%{keyword}%")) |
-                    (PathologyReport.findings.ilike(f"%{keyword}%"))
+                    (PathologyReport.patient_name.ilike(f"%{keyword}%"))
+                    | (PathologyReport.diagnosis.ilike(f"%{keyword}%"))
+                    | (PathologyReport.summary.ilike(f"%{keyword}%"))
+                    | (PathologyReport.test_type.ilike(f"%{keyword}%"))
+                    | (PathologyReport.findings.ilike(f"%{keyword}%"))
                 )
                 .limit(top_k)
                 .all()
@@ -85,24 +92,26 @@ class SearchService:
 
             results = []
             for report in reports:
-                results.append({
-                    "document_id": report.document_id,
-                    "patient_name": report.patient_name,
-                    "patient_id": report.patient_id,
-                    "test_type": report.test_type,
-                    "diagnosis": report.diagnosis,
-                    "summary": report.summary
-                })
+                results.append(
+                    {
+                        "document_id": report.document_id,
+                        "patient_name": report.patient_name,
+                        "patient_id": report.patient_id,
+                        "test_type": report.test_type,
+                        "diagnosis": report.diagnosis,
+                        "summary": report.summary,
+                    }
+                )
 
             return {
                 "status": "success",
                 "keyword": keyword,
                 "total_results": len(results),
-                "results": results
+                "results": results,
             }
         except Exception as e:
             return {
                 "status": "error",
                 "message": f"Keyword search failed: {str(e)}",
-                "results": []
+                "results": [],
             }

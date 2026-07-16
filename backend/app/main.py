@@ -2,19 +2,28 @@ import sys
 import io
 
 # Force console standard streams to use UTF-8 to prevent Windows CP1252/charmap encoding crashes
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.schemas import MessageResponse, HealthResponse
-from app.routes import auth, upload, ocr, text_cleaning, llm_extraction, embeddings, search, chatbot
+from app.routes import (
+    auth,
+    upload,
+    ocr,
+    text_cleaning,
+    llm_extraction,
+    embeddings,
+    search,
+    chatbot,
+)
 
 app = FastAPI(
     title=settings.APP_NAME,
     description="AI-Based Pathology Report Management",
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
 )
 
 # Allow frontend (React/Flutter) to call this API
@@ -24,7 +33,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)   
+)
 
 # Include routers
 app.include_router(auth.router)
@@ -36,9 +45,11 @@ app.include_router(embeddings.router)
 app.include_router(search.router)
 app.include_router(chatbot.router)
 
+
 @app.get("/", response_model=MessageResponse)
 async def root():
     return {"message": "Hello"}
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():

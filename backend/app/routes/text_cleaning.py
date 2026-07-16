@@ -10,14 +10,16 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/clean", tags=["text-cleaning"])
 
+
 class CleanTextRequest(BaseModel):
     text: str
     file_id: Optional[str] = None
 
+
 @router.post("/text", response_model=dict)
 async def clean_text(request: CleanTextRequest, db: Session = Depends(get_db)):
     """Clean and normalize extracted text"""
-    
+
     try:
         result = TextCleaner.clean_text(request.text)
 
@@ -41,7 +43,7 @@ async def clean_text(request: CleanTextRequest, db: Session = Depends(get_db)):
                     status_code=500,
                     detail=f"PostgreSQL persistence failed: {db_err}",
                 )
-        
+
         return {
             "status": result["status"],
             "original_preview": request.text[:200],
@@ -49,8 +51,8 @@ async def clean_text(request: CleanTextRequest, db: Session = Depends(get_db)):
             "original_length": result["original_length"],
             "cleaned_length": result["cleaned_length"],
             "cleaned_text": result["cleaned_text"],
-            "message": result["message"]
+            "message": result["message"],
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

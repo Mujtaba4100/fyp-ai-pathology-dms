@@ -12,7 +12,15 @@ class LLMExtractor:
     """Service for extracting medical information using Groq (Llama-3)"""
 
     def __init__(self):
-        self.groq_client = Groq(api_key=settings.GROQ_API_KEY) if (Groq and settings.GROQ_API_KEY and settings.GROQ_API_KEY != "gsk_change_me_to_your_groq_key") else None
+        self.groq_client = (
+            Groq(api_key=settings.GROQ_API_KEY)
+            if (
+                Groq
+                and settings.GROQ_API_KEY
+                and settings.GROQ_API_KEY != "gsk_change_me_to_your_groq_key"
+            )
+            else None
+        )
         self.groq_model = settings.GROQ_MODEL
 
     @staticmethod
@@ -113,7 +121,10 @@ Extract and return as JSON:"""
         response = self.groq_client.chat.completions.create(
             model=self.groq_model,
             messages=[
-                {"role": "system", "content": "You are a medical data extraction expert. Return ONLY valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
+                },
                 {"role": "user", "content": prompt},
             ],
             temperature=0,
@@ -140,44 +151,45 @@ Extract and return as JSON:"""
                 "status": "json_error",
                 "message": "Could not parse LLM response as JSON",
                 "error": str(e),
-                "data": None
+                "data": None,
             }
         except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e),
-                "data": None
-            }
+            return {"status": "error", "message": str(e), "data": None}
 
     def extract_from_image_vision(self, file_path: str) -> dict:
         """Extract medical information directly from image using Groq Llama 4 Scout Vision"""
         import os
+
         if not self.groq_client:
             return {
                 "status": "error",
                 "message": "Groq client not configured or API key missing",
                 "data": None,
             }
-            
+
         try:
             # 1. Encode image to base64
             with open(file_path, "rb") as image_file:
-                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-                
+                base64_image = base64.b64encode(image_file.read()).decode("utf-8")
+
             # Determine mime type from file extension
             ext = os.path.splitext(file_path)[1].lower().lstrip(".")
-            mime_type = f"image/{ext}" if ext in ["png", "jpg", "jpeg", "webp"] else "image/jpeg"
-            
+            mime_type = (
+                f"image/{ext}"
+                if ext in ["png", "jpg", "jpeg", "webp"]
+                else "image/jpeg"
+            )
+
             # 2. Build extraction prompt
             prompt = self.get_vision_extraction_prompt()
-            
+
             # 3. Call Groq Llama 4 Vision API
             response = self.groq_client.chat.completions.create(
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a medical data extraction expert. Return ONLY valid JSON."
+                        "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
                     },
                     {
                         "role": "user",
@@ -187,35 +199,31 @@ Extract and return as JSON:"""
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:{mime_type};base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
+                                },
+                            },
+                        ],
+                    },
                 ],
                 temperature=0,
                 max_tokens=2000,
             )
-            
+
             response_text = response.choices[0].message.content or ""
             extracted_data = json.loads(self._strip_code_fences(response_text))
-            
+
             return {
                 "status": "success",
                 "message": "Extraction successful using Groq Llama-4 Scout Vision",
                 "data": extracted_data,
-                "cost_estimate": "$0.000000 (Evaluations/Free Tier/Low Cost)"
+                "cost_estimate": "$0.000000 (Evaluations/Free Tier/Low Cost)",
             }
-            
+
         except json.JSONDecodeError as e:
             return {
                 "status": "json_error",
                 "message": "Could not parse Vision LLM response as JSON",
                 "error": str(e),
-                "data": None
+                "data": None,
             }
         except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e),
-                "data": None
-            }
+            return {"status": "error", "message": str(e), "data": None}
