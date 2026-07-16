@@ -300,6 +300,14 @@ function renderExtractionResults(data, method, fileId) {
     const resultsPanel = document.getElementById('extraction-results');
     resultsPanel.style.display = 'flex';
 
+    // Reset Approve button state for new document
+    const btnApprove = document.getElementById('btn-approve');
+    if (btnApprove) {
+        btnApprove.textContent = "Approve & Save to Database";
+        btnApprove.style.backgroundColor = "";
+        btnApprove.disabled = false;
+    }
+
     // Set editable header fields
     document.getElementById('patient-name-input').value = data.patient_name || "";
     document.getElementById('test-type-input').value = data.test_type || "";
@@ -360,6 +368,7 @@ async function approveAndSaveReport() {
     const originalText = btn.textContent;
     btn.textContent = "Saving to EMR...";
     btn.disabled = true;
+    let saveSuccess = false;
 
     try {
         const patientName = document.getElementById('patient-name-input').value.trim();
@@ -411,13 +420,20 @@ async function approveAndSaveReport() {
         }
 
         const resData = await response.json();
+        saveSuccess = true;
         alert("🎉 Report Verified & Saved successfully in PostgreSQL EMR and Vector Search database!");
         
     } catch (err) {
         alert(`Verification failed: ${err.message}`);
     } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
+        if (saveSuccess) {
+            btn.textContent = "Saved successfully ✓";
+            btn.style.backgroundColor = "var(--success-green)";
+            btn.disabled = true;
+        } else {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
     }
 }
 
