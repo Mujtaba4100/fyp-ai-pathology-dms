@@ -40,8 +40,8 @@ async def process_hybrid(request: HybridExtractRequest):
     extractor = LLMExtractor()
     
     try:
-        # 1. Fallback to Vision LLM if OCR text is low quality/short or manually forced
-        if request.force_vision or len(request.ocr_text.strip()) < 200:
+        # 1. Fallback to Vision LLM ONLY if manually requested by the user
+        if request.force_vision:
             file_found = None
             if os.path.exists(UPLOAD_FOLDER):
                 for filename in os.listdir(UPLOAD_FOLDER):
