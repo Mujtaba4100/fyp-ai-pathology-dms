@@ -1,4 +1,5 @@
 const API_BASE = "http://localhost:8000/api";
+let currentFileId = null;
 
 // Authentication helpers
 function getAuthHeader() {
@@ -191,6 +192,7 @@ async function handleFileUpload(file) {
         }
         
         const fileId = uploadData.file_id;
+        currentFileId = fileId;
         
         // --- STEP 2: RUN OCR ---
         progressPercent.textContent = "Step 2: Processing OCR (Reading document)...";
@@ -223,38 +225,42 @@ async function handleFileUpload(file) {
         
         const cleanedText = cleanData.cleaned_text;
 
-        // --- STEP 4: EXTRACT MEDICAL DATA (Groq LLM) ---
-        progressPercent.textContent = "Step 4: Extracting pathology data using AI (Groq Llama-3)...";
-        const extractResponse = await fetch(`${API_BASE}/extract/medical-data`, {
+        // --- STEP 4: HYBRID OCR/VISION EXTRACTION ---
+        progressPercent.textContent = "Step 4: Parsing medical data using Hybrid OCR/Vision AI...";
+        
+        // Automatic fallback if OCR word confidence is low (< 65%)
+        const lowConfidence = ocrData.average_confidence !== undefined && ocrData.average_confidence !== null && ocrData.average_confidence < 65.0;
+        if (lowConfidence) {
+            console.log(`[AI Fallback] Low OCR confidence (${ocrData.average_confidence.toFixed(1)}%). Routing to Llama-4 Vision LLM.`);
+        }
+        
+        const extractResponse = await fetch(`${API_BASE}/extract/process-hybrid`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cleaned_text: cleanedText, file_id: fileId })
+            headers: { 
+                "Content-Type": "application/json",
+                ...getAuthHeader()
+            },
+            body: JSON.stringify({ 
+                ocr_text: cleanedText, 
+                file_id: fileId,
+                force_vision: lowConfidence
+            })
         });
-        if (!extractResponse.ok) throw new Error("LLM Extraction failed.");
+        if (!extractResponse.ok) throw new Error("Hybrid Extraction failed.");
         const extractData = await extractResponse.json();
         
         if (extractData.status !== "success" || !extractData.data) {
             throw new Error(extractData.message || "AI Extraction failed.");
         }
         
-        const medicalData = extractData.data;
-
-        // --- STEP 5: GENERATE & SAVE EMBEDDINGS (Local) ---
-        progressPercent.textContent = "Step 5: Generating search index embeddings (local Sentence-Transformer)...";
-        const embedResponse = await fetch(`${API_BASE}/embeddings/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: cleanedText, file_id: fileId })
-        });
-        
         // Render results on UI
-        progressPercent.textContent = "Processing complete!";
-        renderExtractionResults(medicalData);
+        progressPercent.textContent = "Processing complete! Ready for clinical verification.";
+        renderExtractionResults(extractData.data, extractData.method, fileId);
         
         // Hide progress block after a small delay
         setTimeout(() => {
             progressContainer.style.display = 'none';
-        }, 3000);
+        }, 2000);
 
     } catch (err) {
         console.error(err);
@@ -264,41 +270,129 @@ async function handleFileUpload(file) {
 }
 
 // Render the structured pathology tables
-function renderExtractionResults(data) {
+function renderExtractionResults(data, method, fileId) {
     document.getElementById('extraction-placeholder').style.display = 'none';
     const resultsPanel = document.getElementById('extraction-results');
     resultsPanel.style.display = 'flex';
 
-    // Set header fields
-    document.getElementById('patient-name').textContent = data.patient_name || "Not Found";
-    document.getElementById('test-type').textContent = data.test_type || "Not Found";
-    document.getElementById('test-date').textContent = data.test_date || "Not Found";
+    // Set editable header fields
+    document.getElementById('patient-name-input').value = data.patient_name || "";
+    document.getElementById('test-type-input').value = data.test_type || "";
+    document.getElementById('test-date-input').value = data.test_date || "";
 
-    // Set clinical blocks
-    document.getElementById('diagnosis-text').textContent = data.diagnosis || "No primary diagnosis extracted.";
-    document.getElementById('summary-text').textContent = data.summary || "No summary provided.";
+    // Set clinical text blocks
+    document.getElementById('diagnosis-input').value = data.diagnosis || "";
+    document.getElementById('summary-input').value = data.summary || "";
 
-    // Render findings table rows
+    // Pipeline badge indicator
+    const badge = document.getElementById('extraction-pipeline-method');
+    if (method === "vision_llm") {
+        badge.textContent = "Vision LLM Fallback (Llama-4)";
+        badge.style.backgroundColor = "rgba(139, 92, 246, 0.15)";
+        badge.style.color = "var(--accent-purple)";
+    } else {
+        badge.textContent = "OCR Text Extraction (Llama-3)";
+        badge.style.backgroundColor = "var(--accent-teal-glass)";
+        badge.style.color = "var(--accent-teal)";
+    }
+
+    // Render findings table rows as editable input boxes
     const tbody = document.getElementById('findings-body');
     tbody.innerHTML = "";
 
     if (data.findings && data.findings.length > 0) {
-        data.findings.forEach(finding => {
+        data.findings.forEach((finding, idx) => {
             const tr = document.createElement('tr');
             
-            const badgeClass = finding.is_abnormal ? "status-badge abnormal" : "status-badge normal";
-            const badgeLabel = finding.is_abnormal ? "Abnormal" : "Normal";
-            
             tr.innerHTML = `
-                <td><strong>${finding.test_name || "-"}</strong></td>
-                <td>${finding.value || "-"} ${finding.unit || ""}</td>
-                <td><code>${finding.reference_range || "-"}</code></td>
-                <td><span class="${badgeClass}">${badgeLabel}</span></td>
+                <td><input type="text" class="findings-input" id="finding-name-${idx}" value="${finding.test_name || ""}"></td>
+                <td>
+                    <input type="text" class="findings-input" id="finding-val-${idx}" value="${finding.value || ""}" style="width: 70px;">
+                    <input type="text" class="findings-input" id="finding-unit-${idx}" value="${finding.unit || ""}" style="width: 50px;">
+                </td>
+                <td><input type="text" class="findings-input" id="finding-range-${idx}" value="${finding.reference_range || ""}"></td>
+                <td style="text-align: center;">
+                    <input type="checkbox" class="checkbox-custom" id="finding-abnormal-${idx}" ${finding.is_abnormal ? 'checked' : ''}>
+                </td>
             `;
             tbody.appendChild(tr);
         });
+        tbody.dataset.count = data.findings.length;
     } else {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No findings values extracted.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No findings values extracted. Click Save to save empty report or add rows manually.</td></tr>`;
+        tbody.dataset.count = 0;
+    }
+}
+
+// Clinician Approval & Submission
+async function approveAndSaveReport() {
+    if (!currentFileId) {
+        alert("Error: No active document loaded.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-approve');
+    const originalText = btn.textContent;
+    btn.textContent = "Saving to EMR...";
+    btn.disabled = true;
+
+    try {
+        const patientName = document.getElementById('patient-name-input').value.trim();
+        const testType = document.getElementById('test-type-input').value.trim();
+        const testDate = document.getElementById('test-date-input').value.trim();
+        const diagnosis = document.getElementById('diagnosis-input').value.trim();
+        const summary = document.getElementById('summary-input').value.trim();
+
+        // Read findings rows
+        const tbody = document.getElementById('findings-body');
+        const count = parseInt(tbody.dataset.count || "0", 10);
+        const findings = [];
+
+        for (let idx = 0; idx < count; idx++) {
+            const nameEl = document.getElementById(`finding-name-${idx}`);
+            if (nameEl) {
+                findings.push({
+                    test_name: nameEl.value.trim(),
+                    value: document.getElementById(`finding-val-${idx}`).value.trim(),
+                    unit: document.getElementById(`finding-unit-${idx}`).value.trim(),
+                    reference_range: document.getElementById(`finding-range-${idx}`).value.trim(),
+                    is_abnormal: document.getElementById(`finding-abnormal-${idx}`).checked
+                });
+            }
+        }
+
+        const payload = {
+            file_id: currentFileId,
+            patient_name: patientName || null,
+            test_type: testType || "Pathology Test",
+            test_date: testDate || null,
+            diagnosis: diagnosis || null,
+            summary: summary,
+            findings: findings
+        };
+
+        const response = await fetch(`${API_BASE}/extract/approve-save`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || "Failed to save verified report.");
+        }
+
+        const resData = await response.json();
+        alert("🎉 Report Verified & Saved successfully in PostgreSQL EMR and Vector Search database!");
+        
+    } catch (err) {
+        alert(`Verification failed: ${err.message}`);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }
 
@@ -473,4 +567,50 @@ function renderTypingIndicator(container) {
     `;
     container.appendChild(bubble);
     return bubble;
+}
+
+// Manually trigger extraction using Llama 4 Vision LLM on the current file
+async function forceVisionExtraction() {
+    if (!currentFileId) {
+        alert("No active document loaded.");
+        return;
+    }
+    
+    const progressContainer = document.getElementById('upload-progress');
+    const progressFilename = document.getElementById('progress-filename');
+    const progressPercent = document.getElementById('progress-percent');
+    
+    progressContainer.style.display = 'block';
+    progressFilename.textContent = "Current Document";
+    progressPercent.textContent = "Forcing multimodal visual analysis with Llama-4 Vision LLM...";
+    
+    try {
+        const response = await fetch(`${API_BASE}/extract/process-hybrid`, {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                ...getAuthHeader()
+            },
+            body: JSON.stringify({ ocr_text: "", file_id: currentFileId, force_vision: true })
+        });
+        
+        if (!response.ok) throw new Error("Vision extraction request failed.");
+        const data = await response.json();
+        
+        if (data.status !== "success" || !data.data) {
+            throw new Error(data.message || "Vision extraction failed.");
+        }
+        
+        renderExtractionResults(data.data, data.method, currentFileId);
+        progressPercent.textContent = "Vision extraction complete!";
+        
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 2000);
+        
+    } catch (err) {
+        console.error(err);
+        progressPercent.textContent = `Error: ${err.message}`;
+        alert(`Vision Extraction Error: ${err.message}`);
+    }
 }

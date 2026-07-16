@@ -68,12 +68,13 @@ async def upload_file(
                 file_type=file_type,
             )
         except Exception as db_err:
+            safe_db_err = str(db_err).encode('ascii', 'ignore').decode('ascii')
             return FileUploadResponse(
                 file_id=file_id,
                 filename=file.filename,
                 file_size=file_size,
                 status="error",
-                message=f"PostgreSQL persistence failed: {db_err}",
+                message=f"PostgreSQL persistence failed: {safe_db_err}",
             )
 
         # Save to MS SQL Server (company vault) - best effort only
@@ -90,9 +91,11 @@ async def upload_file(
             )
 
             if mssql_result.get("status") != "success":
-                print(f"⚠️ MS SQL save failed: {mssql_result.get('message')}")
+                safe_msg = str(mssql_result.get('message')).encode('ascii', 'ignore').decode('ascii')
+                print(f"[WARN] MS SQL save failed: {safe_msg}")
         except Exception as mssql_err:
-            print(f"⚠️ MS SQL vault unavailable (skipping): {mssql_err}")
+            safe_msg = str(mssql_err).encode('ascii', 'ignore').decode('ascii')
+            print(f"[WARN] MS SQL vault unavailable (skipping): {safe_msg}")
         
         return FileUploadResponse(
             file_id=file_id,

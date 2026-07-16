@@ -1,3 +1,10 @@
+import sys
+import io
+
+# Force console standard streams to use UTF-8 to prevent Windows CP1252/charmap encoding crashes
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings

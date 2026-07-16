@@ -1,5 +1,6 @@
 from app.config import settings
 import json
+import base64
 
 try:
     from groq import Groq
@@ -13,6 +14,41 @@ class LLMExtractor:
     def __init__(self):
         self.groq_client = Groq(api_key=settings.GROQ_API_KEY) if (Groq and settings.GROQ_API_KEY and settings.GROQ_API_KEY != "gsk_change_me_to_your_groq_key") else None
         self.groq_model = settings.GROQ_MODEL
+
+    @staticmethod
+    def get_vision_extraction_prompt() -> str:
+        """Generate extraction prompt for medical image vision analysis"""
+        return """You are a medical data extraction expert. Extract medical information directly from the provided pathology report image.
+        
+Return the extracted data as JSON with the following structure:
+{
+    "patient_id": "extracted Report ID or patient ID or null",
+    "patient_name": "extracted patient name or null",
+    "test_type": "type of pathology test (e.g. LIVER PROFILE)",
+    "test_date": "date of test (usually under Report Date or Collection Date)",
+    "findings": [
+        {
+            "test_name": "name of test/parameter (e.g., S. Bilirubin (Total), Total Protein, Albumin, Globulin, SGOT, SGPT, Alkaline Phosphatase, etc.)",
+            "value": "measured value (numeric or text, e.g., 9.1 or 1.50)",
+            "unit": "unit of measurement (e.g., g/dl or mg/dl or IU/L)",
+            "reference_range": "normal range (e.g., 6 - 7.8 or 1 - 2.3)",
+            "is_abnormal": true/false
+        }
+    ],
+    "diagnosis": "primary clinical diagnosis/interpretation details if mentioned",
+    "recommendations": "recommendations or urgent checkup advice if mentioned",
+    "summary": "brief summary of findings or interpretation"
+}
+
+Strict Rules:
+1. Return ONLY valid JSON, no other text.
+2. If a field is not found, use null.
+3. is_abnormal must be true if the extracted value lies outside the extracted reference range.
+4. Extract values, reference ranges, and units EXACTLY as they appear visually in the image.
+5. DO NOT use standard reference ranges from your general knowledge base to "correct", override, or substitute the actual values, units, or ranges written in the report. Always extract exactly what is visible in the provided image.
+6. Make sure to capture ALL parameters in the findings table. Do not miss any rows!
+7. Do not hallucinate or guess any data.
+"""
 
     @staticmethod
     def get_extraction_prompt(clean_text: str) -> str:
@@ -103,6 +139,77 @@ Extract and return as JSON:"""
             return {
                 "status": "json_error",
                 "message": "Could not parse LLM response as JSON",
+                "error": str(e),
+                "data": None
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e),
+                "data": None
+            }
+
+    def extract_from_image_vision(self, file_path: str) -> dict:
+        """Extract medical information directly from image using Groq Llama 4 Scout Vision"""
+        import os
+        if not self.groq_client:
+            return {
+                "status": "error",
+                "message": "Groq client not configured or API key missing",
+                "data": None,
+            }
+            
+        try:
+            # 1. Encode image to base64
+            with open(file_path, "rb") as image_file:
+                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+                
+            # Determine mime type from file extension
+            ext = os.path.splitext(file_path)[1].lower().lstrip(".")
+            mime_type = f"image/{ext}" if ext in ["png", "jpg", "jpeg", "webp"] else "image/jpeg"
+            
+            # 2. Build extraction prompt
+            prompt = self.get_vision_extraction_prompt()
+            
+            # 3. Call Groq Llama 4 Vision API
+            response = self.groq_client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a medical data extraction expert. Return ONLY valid JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=0,
+                max_tokens=2000,
+            )
+            
+            response_text = response.choices[0].message.content or ""
+            extracted_data = json.loads(self._strip_code_fences(response_text))
+            
+            return {
+                "status": "success",
+                "message": "Extraction successful using Groq Llama-4 Scout Vision",
+                "data": extracted_data,
+                "cost_estimate": "$0.000000 (Evaluations/Free Tier/Low Cost)"
+            }
+            
+        except json.JSONDecodeError as e:
+            return {
+                "status": "json_error",
+                "message": "Could not parse Vision LLM response as JSON",
                 "error": str(e),
                 "data": None
             }

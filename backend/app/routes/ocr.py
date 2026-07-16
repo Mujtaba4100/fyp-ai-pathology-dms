@@ -95,6 +95,7 @@ async def process_file_ocr(
             status=result["status"],
             extracted_text=result["text"],
             character_count=result.get("character_count", 0),
+            average_confidence=result.get("average_confidence"),
             error_message=result.get("message")
         )
     

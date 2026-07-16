@@ -59,7 +59,7 @@ def init_db():
             vector_enabled = True
         except Exception as ext_err:
             print(
-                "⚠️  pgvector extension could not be enabled. "
+                "[WARN] pgvector extension could not be enabled. "
                 "Skipping vector tables (document_embeddings). "
                 f"Reason: {ext_err}"
             )

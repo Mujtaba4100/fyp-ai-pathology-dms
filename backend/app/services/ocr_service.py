@@ -55,20 +55,31 @@ class OCRService:
             # Extract text using Tesseract OCR
             text = pytesseract.image_to_string(image)
             
+            avg_conf = 100.0
+            try:
+                data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+                confidences = [float(c) for c in data.get("conf", []) if float(c) != -1]
+                if confidences:
+                    avg_conf = sum(confidences) / len(confidences)
+            except Exception as conf_err:
+                logger.warning(f"Could not calculate OCR confidence: {conf_err}")
+            
             if not text or text.strip() == "":
                 return {
                     "status": "no_text",
                     "text": "",
                     "message": "No text found in image",
-                    "character_count": 0
+                    "character_count": 0,
+                    "average_confidence": 0.0
                 }
             
             return {
                 "status": "success",
                 "text": text.strip(),
                 "message": "OCR completed successfully",
-                "character_count": len(text)
-              }
+                "character_count": len(text),
+                "average_confidence": avg_conf
+            }
         
         except Exception as e:
             logger.error(f"Image OCR error: {str(e)}")
@@ -77,7 +88,8 @@ class OCRService:
                 "text": "",
                 "message": str(e),
                 "error": "Image processing failed",
-                "character_count": 0
+                "character_count": 0,
+                "average_confidence": 0.0
             }
     
     @staticmethod

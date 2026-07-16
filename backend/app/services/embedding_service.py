@@ -17,7 +17,7 @@ class EmbeddingService:
             try:
                 EmbeddingService._model_instance = SentenceTransformer(self.model_name)
             except Exception as e:
-                print(f"⚠️ Failed to load local SentenceTransformer: {e}")
+                print(f"[WARN] Failed to load local SentenceTransformer: {e}")
                 
         self.model = EmbeddingService._model_instance
 

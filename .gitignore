@@ -13,3 +13,11 @@ PHASE_6_SETUP.txt
 verify_ai_migration.py
 reset_db.py
 verify_databases.py
+extracted_images/
+correct/
+train-00000-of-00001.parquet
+run_batch_test.py
+check_img_info.py
+check_ocr_runs.py
+check_latest_uploads.py
+test_llama4_vision_new.py

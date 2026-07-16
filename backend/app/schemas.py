@@ -50,6 +50,7 @@ class OCRResponse(BaseModel):
     status: str
     extracted_text: str
     character_count: int
+    average_confidence: Optional[float] = None
     error_message: Optional[str] = None
 
 class OCRListResponse(BaseModel):
