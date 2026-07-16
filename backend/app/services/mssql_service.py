@@ -74,7 +74,7 @@ class MSSQLService:
             INSERT INTO Documents (file_id, filename, file_size, file_data, upload_date)
             VALUES (?, ?, ?, ?, ?)
             """
-            cursor.setinputsizes([None, None, None, (pyodbc.SQL_VARBINARY, 0), None])
+            cursor.setinputsizes([None, None, None, (pyodbc.SQL_VARBINARY, len(file_data)), None])
             cursor.execute(insert_query, (file_id, filename, file_size, pyodbc.Binary(file_data), datetime.now()))
             conn.commit()
             
