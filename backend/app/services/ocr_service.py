@@ -32,6 +32,26 @@ class OCRService:
                 return None
 
     @staticmethod
+    def _preprocess_image(image: Image) -> Image:
+        """Apply advanced high-contrast grayscale scaling and binarization for tabular layout scanning"""
+        # 1. Scale image if width is low (target width at least 2000px) for smooth sub-pixel rendering
+        if image.width < 2000:
+            scale_factor = 2000.0 / image.width
+            new_size = (int(image.width * scale_factor), int(image.height * scale_factor))
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # 2. Convert to Grayscale to remove shadow artifacts and gridlines
+        image = image.convert("L")
+        
+        # 3. Enhance text boundaries and boost contrast
+        image = ImageEnhance.Contrast(image).enhance(2.5)
+        image = ImageEnhance.Sharpness(image).enhance(2.0)
+        
+        # 4. Balance black/white levels (binarization) to prevent decimal point omission
+        image = image.point(lambda p: 255 if p > 135 else 0)
+        return image
+
+    @staticmethod
     def process_image(file_path: str) -> dict:
         """Extract text from image using Tesseract"""
         try:
@@ -40,28 +60,19 @@ class OCRService:
             if tesseract_path:
                 pytesseract.pytesseract.pytesseract_cmd = tesseract_path
 
-            # Open image
+            # Open and preprocess image
             image = Image.open(file_path)
+            image = OCRService._preprocess_image(image)
 
-            # Preprocess image if width is low (< 1200px) to boost OCR accuracy
-            if image.width < 1200:
-                scale_factor = 3
-                new_size = (image.width * scale_factor, image.height * scale_factor)
-                image = image.convert(
-                    "L"
-                )  # Convert to grayscale to remove background noise/watermark effects
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
-                # Boost contrast and sharpen text boundaries for better OCR scanning
-                image = ImageEnhance.Contrast(image).enhance(2.0)
-                image = ImageEnhance.Sharpness(image).enhance(2.0)
-
-            # Extract text using Tesseract OCR
-            text = pytesseract.image_to_string(image)
+            # Extract text using Tesseract OCR with PSM 6 (single uniform block of text)
+            # This forces horizontal tabular reading rather than column splitting
+            custom_config = "--oem 3 --psm 6"
+            text = pytesseract.image_to_string(image, config=custom_config)
 
             avg_conf = 100.0
             try:
                 data = pytesseract.image_to_data(
-                    image, output_type=pytesseract.Output.DICT
+                    image, config=custom_config, output_type=pytesseract.Output.DICT
                 )
                 confidences = [float(c) for c in data.get("conf", []) if float(c) != -1]
                 if confidences:
@@ -114,8 +125,11 @@ class OCRService:
 
             # Process each page
             for page_num, image in enumerate(images, 1):
-                # Extract text from page
-                page_text = pytesseract.image_to_string(image)
+                # Preprocess page image
+                image = OCRService._preprocess_image(image)
+                # Extract text from page with PSM 6 configuration
+                custom_config = "--oem 3 --psm 6"
+                page_text = pytesseract.image_to_string(image, config=custom_config)
                 if page_text.strip():
                     page_texts.append(f"--- Page {page_num} ---\n{page_text}")
                     all_text += f"\n--- Page {page_num} ---\n{page_text}"
