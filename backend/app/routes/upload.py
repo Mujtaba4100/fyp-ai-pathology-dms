@@ -58,7 +58,7 @@ async def upload_file(
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        # Save metadata to PostgreSQL (PRIMARY storage for Phase 6)
+        # Save metadata AND raw file bytes to PostgreSQL (single source of truth)
         try:
             file_type = (
                 (file.content_type or "").strip()
@@ -71,6 +71,7 @@ async def upload_file(
                 filename=file.filename,
                 file_size=file_size,
                 file_type=file_type,
+                file_data=contents,  # Store original file bytes in PostgreSQL vault
             )
         except Exception as db_err:
             safe_db_err = str(db_err).encode("ascii", "ignore").decode("ascii")
@@ -81,30 +82,6 @@ async def upload_file(
                 status="error",
                 message=f"PostgreSQL persistence failed: {safe_db_err}",
             )
-
-        # Save to MS SQL Server (company vault) - best effort only
-        try:
-            from app.services.mssql_service import MSSQLService
-
-            mssql_service = MSSQLService()
-            mssql_result = mssql_service.save_document(
-                file_id=file_id,
-                filename=file.filename,
-                file_size=file_size,
-                file_path=file_path,
-                file_data=contents,
-            )
-
-            if mssql_result.get("status") != "success":
-                safe_msg = (
-                    str(mssql_result.get("message"))
-                    .encode("ascii", "ignore")
-                    .decode("ascii")
-                )
-                print(f"[WARN] MS SQL save failed: {safe_msg}")
-        except Exception as mssql_err:
-            safe_msg = str(mssql_err).encode("ascii", "ignore").decode("ascii")
-            print(f"[WARN] MS SQL vault unavailable (skipping): {safe_msg}")
 
         return FileUploadResponse(
             file_id=file_id,

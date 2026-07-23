@@ -37,12 +37,4 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
 
-    # MS SQL Server (for original PDF storage - Company Database)
-    MSSQL_SERVER: str = os.getenv("MSSQL_SERVER", "")
-    MSSQL_PORT: int = int(os.getenv("MSSQL_PORT", "1433"))
-    MSSQL_DATABASE: str = os.getenv("MSSQL_DATABASE", "EMRDocuments")
-    MSSQL_USER: str = os.getenv("MSSQL_USER", "sa")
-    MSSQL_PASSWORD: str = os.getenv("MSSQL_PASSWORD", "")
-
-
 settings = Settings()

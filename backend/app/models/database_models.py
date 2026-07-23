@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, Text, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
@@ -21,6 +21,7 @@ class Document(Base):
     extraction_status = Column(String(50), default="pending")
     raw_text = Column(Text, nullable=True)
     cleaned_text = Column(Text, nullable=True)
+    file_data = Column(LargeBinary, nullable=True)  # Original file bytes (replaces MS SQL vault)
 
 
 class PathologyReport(Base):

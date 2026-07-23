@@ -14,11 +14,13 @@ class DatabaseService:
 
     @staticmethod
     def save_document(
-        db: Session, file_id: str, filename: str, file_size: int, file_type: str
+        db: Session, file_id: str, filename: str, file_size: int, file_type: str,
+        file_data: bytes = None
     ) -> Document:
-        """Save document metadata"""
+        """Save document metadata and optionally the raw file bytes (PostgreSQL vault)"""
         doc = Document(
-            file_id=file_id, filename=filename, file_size=file_size, file_type=file_type
+            file_id=file_id, filename=filename, file_size=file_size, file_type=file_type,
+            file_data=file_data
         )
         db.add(doc)
         db.commit()
