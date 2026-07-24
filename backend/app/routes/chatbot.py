@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -35,7 +36,10 @@ async def ask_chatbot(request: ChatRequest, db: Session = Depends(get_db)):
         for msg in request.conversation_history:
             formatted_history.append({"role": msg.role, "content": msg.content})
 
-    result = rag_service.answer_question(db, request.question, formatted_history)
+    # --- Blocking: SentenceTransformer encode + pgvector search + Groq HTTP call ---
+    result = await asyncio.to_thread(
+        rag_service.answer_question, db, request.question, formatted_history
+    )
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])
 

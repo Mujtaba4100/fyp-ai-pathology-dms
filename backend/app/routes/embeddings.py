@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -24,7 +25,9 @@ class SimilarityRequest(BaseModel):
 async def generate_embedding(request: EmbeddingRequest, db: Session = Depends(get_db)):
     """Generate an embedding and optionally persist it to PostgreSQL."""
     service = EmbeddingService()
-    result = service.generate_embedding(request.text)
+
+    # --- Blocking: SentenceTransformer encode (CPU-bound) ---
+    result = await asyncio.to_thread(service.generate_embedding, request.text)
 
     if result.get("status") != "success":
         message = result.get("message", "Embedding generation failed")
@@ -33,11 +36,13 @@ async def generate_embedding(request: EmbeddingRequest, db: Session = Depends(ge
 
     if request.file_id:
         try:
-            DatabaseService.save_embedding(
-                db=db,
-                file_id=request.file_id,
-                embedding=result["embedding"],
-                text_chunk=request.text[:500],
+            # --- Blocking: PostgreSQL write ---
+            await asyncio.to_thread(
+                DatabaseService.save_embedding,
+                db,
+                request.file_id,
+                result["embedding"],
+                request.text[:500],
             )
         except Exception as db_err:
             raise HTTPException(
@@ -52,13 +57,14 @@ async def calculate_similarity(request: SimilarityRequest):
     """Calculate cosine similarity between two texts."""
     service = EmbeddingService()
 
-    emb1 = service.generate_embedding(request.text1)
+    # --- Blocking: SentenceTransformer encode (CPU-bound) x2 ---
+    emb1 = await asyncio.to_thread(service.generate_embedding, request.text1)
     if emb1.get("status") != "success":
         raise HTTPException(
             status_code=500, detail=emb1.get("message", "Failed to embed text1")
         )
 
-    emb2 = service.generate_embedding(request.text2)
+    emb2 = await asyncio.to_thread(service.generate_embedding, request.text2)
     if emb2.get("status") != "success":
         raise HTTPException(
             status_code=500, detail=emb2.get("message", "Failed to embed text2")
@@ -80,7 +86,9 @@ async def test_embedding():
     sample_text = (
         "Patient hemoglobin elevated at 18 g/dL with suspected anemia follow-up."
     )
-    result = service.generate_embedding(sample_text)
+
+    # --- Blocking: SentenceTransformer encode (CPU-bound) ---
+    result = await asyncio.to_thread(service.generate_embedding, sample_text)
 
     if result.get("status") != "success":
         raise HTTPException(

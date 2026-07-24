@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.llm_extractor import LLMExtractor
 from pydantic import BaseModel
@@ -28,7 +29,8 @@ async def extract_medical_data(request: ExtractRequest, db: Session = Depends(ge
     """Extract structured medical data from cleaned text using LLM (Legacy Endpoint)"""
     try:
         extractor = LLMExtractor()
-        result = extractor.extract_from_text(request.cleaned_text)
+        # --- Blocking: Groq HTTP call ---
+        result = await asyncio.to_thread(extractor.extract_from_text, request.cleaned_text)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -38,8 +40,8 @@ async def extract_medical_data(request: ExtractRequest, db: Session = Depends(ge
 async def process_hybrid(request: HybridExtractRequest):
     """
     Hybrid OCR/Vision parser.
-    If OCR text is short (< 200 characters) or force_vision is True, it automatically falls back to Groq Llama 4 Vision.
-    Otherwise, it runs the standard text-based LLM extractor.
+    If OCR text is short (< 200 characters) or force_vision is True, it automatically
+    falls back to Groq Llama Vision. Otherwise, runs the standard text-based LLM extractor.
     """
     extractor = LLMExtractor()
 
@@ -55,7 +57,8 @@ async def process_hybrid(request: HybridExtractRequest):
 
             if file_found:
                 file_path = os.path.join(UPLOAD_FOLDER, file_found)
-                result = extractor.extract_from_image_vision(file_path)
+                # --- Blocking: Groq Vision HTTP call ---
+                result = await asyncio.to_thread(extractor.extract_from_image_vision, file_path)
                 return {
                     "status": result.get("status"),
                     "method": "vision_llm",
@@ -64,7 +67,8 @@ async def process_hybrid(request: HybridExtractRequest):
                 }
 
         # 2. Default: Text LLM
-        result = extractor.extract_from_text(request.ocr_text)
+        # --- Blocking: Groq HTTP call ---
+        result = await asyncio.to_thread(extractor.extract_from_text, request.ocr_text)
         return {
             "status": result.get("status"),
             "method": "text_llm",
@@ -92,7 +96,8 @@ async def test_extraction():
     """
     try:
         extractor = LLMExtractor()
-        result = extractor.extract_from_text(sample_text)
+        # --- Blocking: Groq HTTP call ---
+        result = await asyncio.to_thread(extractor.extract_from_text, sample_text)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -127,13 +132,15 @@ async def approve_save(request: ApproveSaveRequest, db: Session = Depends(get_db
     try:
         extraction_data = request.dict()
 
-        # 1. Save pathology report
-        report = DatabaseService.save_pathology_report(
-            db=db, file_id=request.file_id, extraction_data=extraction_data
+        # --- Blocking: PostgreSQL write ---
+        report = await asyncio.to_thread(
+            DatabaseService.save_pathology_report,
+            db, request.file_id, extraction_data
         )
 
-        # 2. Retrieve document text for embeddings
-        doc = DatabaseService.get_document(db, request.file_id)
+        # --- Blocking: PostgreSQL read ---
+        doc = await asyncio.to_thread(DatabaseService.get_document, db, request.file_id)
+
         if doc:
             text_to_embed = doc.cleaned_text or doc.raw_text or request.summary
             if text_to_embed:
@@ -141,13 +148,18 @@ async def approve_save(request: ApproveSaveRequest, db: Session = Depends(get_db
                     from app.services.embedding_service import EmbeddingService
 
                     embed_service = EmbeddingService()
-                    embed_res = embed_service.generate_embedding(text_to_embed)
+                    # --- Blocking: SentenceTransformer encode (CPU-bound) ---
+                    embed_res = await asyncio.to_thread(
+                        embed_service.generate_embedding, text_to_embed
+                    )
                     if embed_res.get("status") == "success":
-                        DatabaseService.save_embedding(
-                            db=db,
-                            file_id=request.file_id,
-                            embedding=embed_res["embedding"],
-                            text_chunk=text_to_embed[:500],
+                        # --- Blocking: PostgreSQL write ---
+                        await asyncio.to_thread(
+                            DatabaseService.save_embedding,
+                            db,
+                            request.file_id,
+                            embed_res["embedding"],
+                            text_to_embed[:500],
                         )
                 except Exception as emb_err:
                     print(

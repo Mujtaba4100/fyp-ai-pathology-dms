@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -28,7 +29,10 @@ async def semantic_search(
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query text cannot be empty")
 
-    result = SearchService.semantic_search(db, request.query, request.top_k)
+    # --- Blocking: SentenceTransformer encode + PostgreSQL pgvector query ---
+    result = await asyncio.to_thread(
+        SearchService.semantic_search, db, request.query, request.top_k
+    )
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])
 
@@ -43,7 +47,10 @@ async def keyword_search(request: KeywordSearchRequest, db: Session = Depends(ge
     if not request.keyword.strip():
         raise HTTPException(status_code=400, detail="Keyword cannot be empty")
 
-    result = SearchService.keyword_search(db, request.keyword, request.top_k)
+    # --- Blocking: PostgreSQL LIKE/full-text query ---
+    result = await asyncio.to_thread(
+        SearchService.keyword_search, db, request.keyword, request.top_k
+    )
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])
 

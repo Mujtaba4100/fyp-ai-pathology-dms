@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.ocr_service import OCRService
 from app.schemas import OCRResponse
@@ -35,11 +36,11 @@ async def process_file_ocr(
     """
 
     try:
-        # Check upload folder exists
+        # Check upload folder exists (cheap, stays on event loop)
         if not os.path.exists(UPLOAD_FOLDER):
             raise HTTPException(status_code=404, detail="Upload folder not found")
 
-        # Find file with matching file_id
+        # Find file with matching file_id (cheap directory listing)
         file_found = None
         for filename in os.listdir(UPLOAD_FOLDER):
             if filename.startswith(file_id):
@@ -53,11 +54,11 @@ async def process_file_ocr(
 
         file_path = os.path.join(UPLOAD_FOLDER, file_found)
 
-        # Process file with OCR
-        result = OCRService.process_file(file_path)
+        # --- Blocking: Tesseract OCR (CPU-bound) ---
+        result = await asyncio.to_thread(OCRService.process_file, file_path)
 
-        # Persist OCR results to PostgreSQL (Phase 6 primary storage)
-        try:
+        # --- Blocking: PostgreSQL writes via SQLAlchemy ---
+        def _persist_ocr():
             ocr_db_status = (
                 "completed" if result.get("status") == "success" else "failed"
             )
@@ -85,12 +86,14 @@ async def process_file_ocr(
                     raw_text=result.get("text", ""),
                     status=ocr_db_status,
                 )
+
+        try:
+            await asyncio.to_thread(_persist_ocr)
         except Exception as db_err:
             raise HTTPException(
                 status_code=500, detail=f"PostgreSQL persistence failed: {db_err}"
             )
 
-        # Return response
         return OCRResponse(
             file_id=file_id,
             status=result["status"],
@@ -126,7 +129,6 @@ async def get_ocr_status(file_id: str, current_user=Depends(get_current_user)):
         if not os.path.exists(UPLOAD_FOLDER):
             return {"status": "not_found", "message": "Upload folder not found"}
 
-        # Find file with matching file_id
         file_found = None
         for filename in os.listdir(UPLOAD_FOLDER):
             if filename.startswith(file_id):
@@ -140,9 +142,8 @@ async def get_ocr_status(file_id: str, current_user=Depends(get_current_user)):
                 "message": f"File {file_id} not found",
             }
 
-        # Get file info
         file_path = os.path.join(UPLOAD_FOLDER, file_found)
-        file_size = os.path.getsize(file_path)
+        file_size = await asyncio.to_thread(os.path.getsize, file_path)
 
         return {
             "status": "ready",
@@ -178,18 +179,21 @@ async def list_processed_files(current_user=Depends(get_current_user)):
                 "message": "Upload folder not found",
             }
 
-        files = []
-        for filename in os.listdir(UPLOAD_FOLDER):
-            file_path = os.path.join(UPLOAD_FOLDER, filename)
-            if os.path.isfile(file_path):
-                files.append(
-                    {
-                        "filename": filename,
-                        "size": os.path.getsize(file_path),
-                        "path": file_path,
-                    }
-                )
+        def _list_files():
+            result = []
+            for filename in os.listdir(UPLOAD_FOLDER):
+                fp = os.path.join(UPLOAD_FOLDER, filename)
+                if os.path.isfile(fp):
+                    result.append(
+                        {
+                            "filename": filename,
+                            "size": os.path.getsize(fp),
+                            "path": fp,
+                        }
+                    )
+            return result
 
+        files = await asyncio.to_thread(_list_files)
         return {"files": files, "total": len(files), "status": "success"}
 
     except Exception as e:

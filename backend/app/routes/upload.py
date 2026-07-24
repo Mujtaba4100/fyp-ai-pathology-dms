@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status
 from app.security import get_current_user, require_role
 from app.schemas import FileUploadResponse
@@ -54,9 +55,12 @@ async def upload_file(
                 message="File size exceeds 10MB limit",
             )
 
-        # Save to local disk
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        # --- Blocking: disk write ---
+        def _write_file():
+            with open(file_path, "wb") as f:
+                f.write(contents)
+
+        await asyncio.to_thread(_write_file)
 
         # Save metadata AND raw file bytes to PostgreSQL (single source of truth)
         try:
@@ -65,13 +69,15 @@ async def upload_file(
                 or file_extension.lstrip(".")
                 or "unknown"
             )
-            DatabaseService.save_document(
-                db=db,
-                file_id=file_id,
-                filename=file.filename,
-                file_size=file_size,
-                file_type=file_type,
-                file_data=contents,  # Store original file bytes in PostgreSQL vault
+            # --- Blocking: PostgreSQL write ---
+            await asyncio.to_thread(
+                DatabaseService.save_document,
+                db,
+                file_id,
+                file.filename,
+                file_size,
+                file_type,
+                contents,  # Store original file bytes in PostgreSQL vault
             )
         except Exception as db_err:
             safe_db_err = str(db_err).encode("ascii", "ignore").decode("ascii")

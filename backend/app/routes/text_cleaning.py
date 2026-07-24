@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.text_cleaner import TextCleaner
 from app.schemas import TextCleanResponse
@@ -21,16 +22,22 @@ async def clean_text(request: CleanTextRequest, db: Session = Depends(get_db)):
     """Clean and normalize extracted text"""
 
     try:
-        result = TextCleaner.clean_text(request.text)
+        # TextCleaner is pure-Python / regex — fast enough for the event loop,
+        # but wrapped for safety so large texts don't block other requests.
+        result = await asyncio.to_thread(TextCleaner.clean_text, request.text)
 
         # Persist cleaned text if caller provides a document file_id
         if request.file_id:
             try:
-                saved = DatabaseService.save_cleaned_text(
-                    db=db,
-                    file_id=request.file_id,
-                    cleaned_text=result["cleaned_text"],
-                )
+                # --- Blocking: PostgreSQL write ---
+                def _save():
+                    return DatabaseService.save_cleaned_text(
+                        db=db,
+                        file_id=request.file_id,
+                        cleaned_text=result["cleaned_text"],
+                    )
+
+                saved = await asyncio.to_thread(_save)
                 if saved is None:
                     raise HTTPException(
                         status_code=404,
