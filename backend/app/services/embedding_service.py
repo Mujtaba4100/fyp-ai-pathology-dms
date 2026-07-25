@@ -9,20 +9,38 @@ import numpy as np
 
 
 class EmbeddingService:
-    """Service for generating and comparing embeddings locally."""
+    """Service for generating and comparing embeddings locally.
 
+    Model: FremyCompany/BioLORD-2023-M
+    A domain-specific biomedical / clinical language model fine-tuned for
+    medical terminology, pathology, and clinical NLP tasks.
+    Dimension: 768 (vs. 384 for generic all-MiniLM-L6-v2).
+    """
+
+    # Class-level cache — shared across all instances within the same process.
+    # Reset when the model name changes so old weights are never reused.
     _model_instance = None
+    _loaded_model_name: str = None
+
+    # BioLORD-2023-M: biomedical/clinical domain-specific embedding model (768-dim)
+    MODEL_NAME = "FremyCompany/BioLORD-2023-M"
+    DIMENSION = 768
 
     def __init__(self):
-        self.model_name = "all-MiniLM-L6-v2"
-        self.dimension = 384
+        self.model_name = self.MODEL_NAME
+        self.dimension = self.DIMENSION
 
-        # Cache model to avoid reloading on every request
-        if EmbeddingService._model_instance is None:
+        # Load once per process; reload only if the model name changed.
+        if (
+            EmbeddingService._model_instance is None
+            or EmbeddingService._loaded_model_name != self.model_name
+        ):
             try:
                 EmbeddingService._model_instance = SentenceTransformer(self.model_name)
+                EmbeddingService._loaded_model_name = self.model_name
             except Exception as e:
-                print(f"[WARN] Failed to load local SentenceTransformer: {e}")
+                print(f"[WARN] Failed to load local SentenceTransformer ({self.model_name}): {e}")
+                EmbeddingService._model_instance = None
 
         self.model = EmbeddingService._model_instance
 
@@ -35,7 +53,7 @@ class EmbeddingService:
         return cleaned_text, truncated
 
     def generate_embedding(self, text: str) -> dict:
-        """Generate a 384-dim embedding for input text locally."""
+        """Generate a 768-dim BioLORD embedding for input text locally."""
         if not text or not text.strip():
             return {
                 "status": "error",
@@ -48,6 +66,7 @@ class EmbeddingService:
         if not self.model:
             try:
                 EmbeddingService._model_instance = SentenceTransformer(self.model_name)
+                EmbeddingService._loaded_model_name = self.model_name
                 self.model = EmbeddingService._model_instance
             except Exception as e:
                 return {
@@ -61,7 +80,6 @@ class EmbeddingService:
         cleaned_text, truncated = self._trim_text(text)
 
         try:
-            # Generate embedding using local model
             emb = self.model.encode(cleaned_text)
             embedding = emb.tolist()
 
@@ -69,6 +87,7 @@ class EmbeddingService:
                 "status": "success",
                 "embedding": embedding,
                 "dimension": len(embedding),
+                "model": self.model_name,
                 "cost_estimate": "$0.000000 (Local - Free)",
                 "tokens_used": len(cleaned_text) // 4,
                 "truncated": truncated,

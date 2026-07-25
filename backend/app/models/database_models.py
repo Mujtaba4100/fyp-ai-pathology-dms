@@ -51,8 +51,8 @@ class DocumentEmbedding(Base):
     id = Column(Integer, primary_key=True)
     document_id = Column(String(36), index=True, unique=True)
     embedding = Column(
-        Vector(384)
-    )  # Sentence-Transformers all-MiniLM-L6-v2 embedding is 384-dimensional
+        Vector(768)
+    )  # FremyCompany/BioLORD-2023-M (biomedical domain) embedding is 768-dimensional
     text_chunk = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
