@@ -252,7 +252,7 @@ async function handleFileUpload(file) {
             
             cleanedText = cleanData.cleaned_text;
         } else {
-            console.log(`[AI Pipeline] Bypassing Standard OCR. Routing directly to Llama-3.2 Vision API.`);
+            console.log(`[AI Pipeline] Bypassing Standard OCR. Routing directly to Llama-4 Maverick Vision API.`);
         }
 
         // --- STEP 4: HYBRID OCR/VISION EXTRACTION ---
@@ -320,7 +320,7 @@ function renderExtractionResults(data, method, fileId) {
     // Pipeline badge indicator
     const badge = document.getElementById('extraction-pipeline-method');
     if (method === "vision_llm") {
-        badge.textContent = "Vision LLM Fallback (Llama-3.2)";
+        badge.textContent = "Vision LLM Fallback (Llama-4 Maverick)";
         badge.style.backgroundColor = "rgba(139, 92, 246, 0.15)";
         badge.style.color = "var(--accent-purple)";
     } else {
@@ -623,7 +623,7 @@ async function forceVisionExtraction() {
     
     progressContainer.style.display = 'block';
     progressFilename.textContent = "Current Document";
-    progressPercent.textContent = "Forcing multimodal visual analysis with Llama-3.2 Vision LLM...";
+    progressPercent.textContent = "Forcing multimodal visual analysis with Llama-4 Maverick Vision LLM...";
     
     try {
         const response = await fetch(`${API_BASE}/extract/process-hybrid`, {

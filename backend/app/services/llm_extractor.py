@@ -183,9 +183,9 @@ Extract and return as JSON:"""
             # 2. Build extraction prompt
             prompt = self.get_vision_extraction_prompt()
 
-            # 3. Call Groq Llama 3.2 Vision API
+            # 3. Call Groq Llama 4 Maverick Vision API (replaces decommissioned llama-3.2-11b-vision-preview)
             response = self.groq_client.chat.completions.create(
-                model="llama-3.2-11b-vision-preview",
+                model="meta-llama/llama-4-maverick-17b-128e-instruct",
                 messages=[
                     {
                         "role": "system",

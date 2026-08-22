@@ -1,0 +1,53 @@
+:root {
+  /* Brand Clinical Colors */
+  --primary-teal: #1b4d4f;
+  --primary-teal-hover: #153c3e;
+  --primary-teal-light: #e6f2f2;
+  --teal-accent: #2a7274;
+  --teal-subtle: #f0f7f7;
+  
+  /* Canvas & Surface Colors */
+  --bg-canvas: #f8fafb;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-hover: #f3f5f7;
+  
+  /* Borders & Dividers */
+  --border-subtle: #e5e9eb;
+  --border-light: #f0f2f4;
+  --border-focus: #1b4d4f;
+  
+  /* Typography Colors */
+  --text-main: #111827;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --text-white: #ffffff;
+
+  /* Status Badges */
+  --badge-normal-bg: #d1fae5;
+  --badge-normal-text: #065f46;
+  
+  --badge-high-bg: #fee2e2;
+  --badge-high-text: #991b1b;
+  
+  --badge-low-bg: #fef3c7;
+  --badge-low-text: #92400e;
+  
+  --badge-pending-bg: #f3f4f6;
+  --badge-pending-text: #4b5563;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+}

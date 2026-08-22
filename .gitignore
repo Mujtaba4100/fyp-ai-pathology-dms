@@ -21,3 +21,21 @@ check_img_info.py
 check_ocr_runs.py
 check_latest_uploads.py
 test_llama4_vision_new.py
+documentation/
+deepseek_ocr2_results/
+ocr_outputs/
+Untitled11.ipynb
+benchmark_results.json
+check_progress.py
+copy_all_images.py
+debug_registration.py
+DeepSeek_OCR_2_T4_Benchmark.ipynb
+documentation (1).zip
+documentation.pdf
+documentation_extracted.txt
+extract_pdf.py
+filter_38_images.py
+generate_docx_report.py
+ocr_benchmark_colab.py
+ocr_outputs.zip
+organize_best_worst.py

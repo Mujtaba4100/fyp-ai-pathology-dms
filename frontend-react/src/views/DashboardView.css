@@ -1,0 +1,162 @@
+.dashboard-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Top Header Bar */
+.dash-top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.greeting-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.greeting-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.dash-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #f1f4f6;
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  width: 240px;
+  transition: all var(--transition-fast);
+}
+
+.header-search-box:focus-within {
+  background-color: var(--bg-surface);
+  border-color: var(--border-focus);
+}
+
+.search-icon {
+  color: var(--text-light);
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-main);
+  width: 100%;
+}
+
+.search-input::placeholder {
+  color: var(--text-light);
+}
+
+/* 4 Stats Grid */
+.dash-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+/* Main Content Grid */
+.dash-main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+/* Recent Reports Card */
+.recent-reports-card {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.section-heading {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.view-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--primary-teal);
+  transition: opacity var(--transition-fast);
+}
+
+.view-all-btn:hover {
+  opacity: 0.8;
+}
+
+/* Pathology Table */
+.table-responsive {
+  overflow-x: auto;
+}
+
+.pathology-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.pathology-table th {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-light);
+  text-transform: capitalize;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pathology-table td {
+  font-size: 13px;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.pathology-table tr:last-child td {
+  border-bottom: none;
+}
+
+.patient-cell-name {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.test-cell-name {
+  color: var(--text-muted);
+}
+
+.date-cell, .status-cell {
+  color: var(--text-muted);
+}
+
+.pipeline-widget-container {
+  display: flex;
+  flex-direction: column;
+}
