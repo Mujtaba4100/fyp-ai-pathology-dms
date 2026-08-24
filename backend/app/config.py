@@ -17,15 +17,9 @@ class Settings(BaseSettings):
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     )
 
-    # OpenAI API
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-
-    # Google AI API
-    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
-
-    # Groq API
+    # Groq Open-Source LLM Execution Engine
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "groq/compound-mini")
 
     # PostgreSQL (for text extraction + embeddings)
     # If provided, this is the primary connection string (e.g., Neon hosted Postgres).

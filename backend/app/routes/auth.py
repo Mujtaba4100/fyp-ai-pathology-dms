@@ -1,110 +1,240 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
 from app.schemas import UserRegister, UserLogin, UserOut, Token
+from app.database import get_db
+from app.models.database_models import User
 from app.security import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user,
+    require_role,
 )
 from datetime import timedelta
 import os
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Mock in-memory database seeded with default credentials
-fake_users_db = {
-    "admin": {
-        "id": 1,
-        "username": "admin",
-        "email": "admin@example.com",
-        "password_hash": get_password_hash("admin123"),
-        "role": "admin",
-    }
+# In-memory default admin fallback if database is empty
+DEFAULT_ADMIN = {
+    "username": "admin",
+    "email": "admin@pathiq.local",
+    "password_hash": get_password_hash("admin123"),
+    "role": "admin",
 }
 
 
-@router.post("/register", response_model=UserOut)
-async def register(user_data: UserRegister):
-    """
-    Register a new user
+class ForgotPasswordRequest(BaseModel):
+    email: str
+    new_password: str
 
-    Roles: doctor, lab_tech, admin
+
+class RoleUpdateRequest(BaseModel):
+    role: str  # doctor, lab_tech, admin
+
+
+@router.post("/register", response_model=UserOut)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """
-    if user_data.username in fake_users_db:
+    Register a new user in PostgreSQL EMR database (SRS Use Case 13)
+    Allowed public roles: doctor, lab_tech (Admin role assignment restricted to existing Admins)
+    """
+    # Prevent unauthorized privilege escalation to admin via public signup
+    requested_role = (user_data.role or "doctor").lower()
+    if requested_role == "admin":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration as Administrator is not permitted. Only existing Administrators can assign this role in User Management.",
+        )
+    if requested_role not in ["doctor", "lab_tech"]:
+        requested_role = "doctor"
+
+    existing_user = (
+        db.query(User)
+        .filter((User.username == user_data.username) | (User.email == user_data.email))
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already exists",
         )
 
-    # Hash password
-    hashed_password = get_password_hash(user_data.password)
-
-    # Store in mock database
-    user_id = len(fake_users_db) + 1
-    fake_users_db[user_data.username] = {
-        "id": user_id,
-        "username": user_data.username,
-        "email": user_data.email,
-        "password_hash": hashed_password,
-        "role": user_data.role,
-    }
+    hashed_pw = get_password_hash(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        password_hash=hashed_pw,
+        role=requested_role,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
 
     return {
-        "id": user_id,
-        "username": user_data.username,
-        "email": user_data.email,
-        "role": user_data.role,
+        "id": new_user.id,
+        "username": new_user.username,
+        "email": new_user.email,
+        "role": new_user.role,
     }
 
 
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin):
+async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """
-    Login with username and password
-
+    Login with username and password (SRS Use Case 12)
     Returns JWT access token
     """
-    user = fake_users_db.get(credentials.username)
+    # 1. Check PostgreSQL User table
+    db_user = db.query(User).filter(User.username == credentials.username).first()
 
-    if not user or not verify_password(credentials.password, user["password_hash"]):
+    if db_user and verify_password(credentials.password, db_user.password_hash):
+        token_expires = timedelta(
+            minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+        )
+        token = create_access_token(
+            data={"sub": db_user.username, "role": db_user.role},
+            expires_delta=token_expires,
+        )
+        return {"access_token": token, "token_type": "bearer"}
+
+    # 2. Fallback check for default admin
+    if (
+        credentials.username == DEFAULT_ADMIN["username"]
+        and verify_password(credentials.password, DEFAULT_ADMIN["password_hash"])
+    ):
+        token_expires = timedelta(minutes=60)
+        token = create_access_token(
+            data={"sub": DEFAULT_ADMIN["username"], "role": DEFAULT_ADMIN["role"]},
+            expires_delta=token_expires,
+        )
+        return {"access_token": token, "token_type": "bearer"}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid username or password",
+    )
+
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset user password (SRS Use Case 14)
+    """
+    user = (
+        db.query(User)
+        .filter((User.email == req.email) | (User.username == req.email))
+        .first()
+    )
+    if not user:
+        # Check default admin
+        if req.email in ["admin", "admin@example.com", "admin@pathiq.local"]:
+            DEFAULT_ADMIN["password_hash"] = get_password_hash(req.new_password)
+            return {"status": "success", "message": "Password reset successfully for admin"}
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email or username",
         )
 
-    # Create JWT token
-    access_token_expires = timedelta(
-        minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    )
-    access_token = create_access_token(
-        data={"sub": user["username"], "role": user["role"]},
-        expires_delta=access_token_expires,
-    )
+    user.password_hash = get_password_hash(req.new_password)
+    db.commit()
+    return {"status": "success", "message": "Password has been successfully updated"}
 
-    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/users")
+async def list_all_users(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+):
+    """
+    List all system users for administrative management (SRS Use Case 7)
+    """
+    users = db.query(User).order_by(User.id.asc()).all()
+    user_list = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at.strftime("%b %d, %Y") if u.created_at else "Default",
+        }
+        for u in users
+    ]
+
+    # Ensure admin is represented if table has only new users
+    if not any(u["username"] == "admin" for u in user_list):
+        user_list.insert(0, {
+            "id": 0,
+            "username": "admin",
+            "email": "admin@pathiq.local",
+            "role": "admin",
+            "created_at": "System Default",
+        })
+
+    return {"status": "success", "users": user_list, "total": len(user_list)}
+
+
+@router.put("/users/{username}/role")
+async def update_user_role(
+    username: str,
+    req: RoleUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+):
+    """
+    Assign roles & permissions to user (SRS Use Case 8)
+    """
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found")
+
+    user.role = req.role
+    db.commit()
+    return {"status": "success", "message": f"Role updated to {req.role} for {username}"}
+
+
+@router.delete("/users/{username}")
+async def delete_user(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+):
+    """
+    Delete a user account (SRS Use Case 7)
+    """
+    if username == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete root system administrator")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found")
+
+    db.delete(user)
+    db.commit()
+    return {"status": "success", "message": f"User {username} successfully removed"}
 
 
 @router.get("/me", response_model=UserOut)
-async def get_current_user_info(current_user=Depends(get_current_user)):
+async def get_current_user_info(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """
-    Get current logged-in user information
-
-    Requires: Valid JWT token
+    Get current logged-in user profile
     """
-    user = fake_users_db.get(current_user.username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    db_user = db.query(User).filter(User.username == current_user.username).first()
+    if db_user:
+        return {
+            "id": db_user.id,
+            "username": db_user.username,
+            "email": db_user.email,
+            "role": db_user.role,
+        }
 
     return {
-        "id": user["id"],
-        "username": user["username"],
-        "email": user["email"],
-        "role": user["role"],
+        "id": 1,
+        "username": current_user.username,
+        "email": f"{current_user.username}@pathiq.local",
+        "role": current_user.role or "doctor",
     }
-
-
-@router.post("/logout")
-async def logout(current_user=Depends(get_current_user)):
-    """
-    Logout user (client-side: delete JWT token from localStorage)
-    """
-    return {"message": f"User {current_user.username} logged out successfully"}

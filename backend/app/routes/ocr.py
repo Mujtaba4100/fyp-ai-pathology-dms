@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 import os
 from pathlib import Path
 
+import tempfile
+
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(tempfile.gettempdir(), "aidatrix_uploads"))
 
 
 @router.post("/process/{file_id}", response_model=OCRResponse)
@@ -36,23 +38,30 @@ async def process_file_ocr(
     """
 
     try:
-        # Check upload folder exists (cheap, stays on event loop)
-        if not os.path.exists(UPLOAD_FOLDER):
-            raise HTTPException(status_code=404, detail="Upload folder not found")
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Find file with matching file_id (cheap directory listing)
+        # 1. Try finding file on local disk staging cache
         file_found = None
         for filename in os.listdir(UPLOAD_FOLDER):
             if filename.startswith(file_id):
                 file_found = filename
                 break
 
+        # 2. If not on disk, pull original file bytes directly from PostgreSQL DB
         if not file_found:
-            raise HTTPException(
-                status_code=404, detail=f"File with ID {file_id} not found in uploads"
-            )
-
-        file_path = os.path.join(UPLOAD_FOLDER, file_found)
+            from app.models.database_models import Document
+            doc = db.query(Document).filter(Document.file_id == file_id).first()
+            if doc and doc.file_data:
+                file_found = f"{file_id}_{doc.filename or 'document.jpg'}"
+                file_path = os.path.join(UPLOAD_FOLDER, file_found)
+                with open(file_path, "wb") as f:
+                    f.write(doc.file_data)
+            else:
+                raise HTTPException(
+                    status_code=404, detail=f"File with ID {file_id} not found in PostgreSQL or local cache"
+                )
+        else:
+            file_path = os.path.join(UPLOAD_FOLDER, file_found)
 
         # --- Blocking: Tesseract OCR (CPU-bound) ---
         result = await asyncio.to_thread(OCRService.process_file, file_path)

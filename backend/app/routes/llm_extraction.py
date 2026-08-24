@@ -14,7 +14,8 @@ UPLOAD_FOLDER = "uploads"
 
 
 class ExtractRequest(BaseModel):
-    cleaned_text: str
+    cleaned_text: Optional[str] = None
+    raw_text: Optional[str] = None
     file_id: Optional[str] = None
 
 
@@ -26,11 +27,12 @@ class HybridExtractRequest(BaseModel):
 
 @router.post("/medical-data")
 async def extract_medical_data(request: ExtractRequest, db: Session = Depends(get_db)):
-    """Extract structured medical data from cleaned text using LLM (Legacy Endpoint)"""
+    """Extract structured medical data from cleaned text using LLM"""
     try:
         extractor = LLMExtractor()
+        text_to_process = request.cleaned_text or request.raw_text or ""
         # --- Blocking: Groq HTTP call ---
-        result = await asyncio.to_thread(extractor.extract_from_text, request.cleaned_text)
+        result = await asyncio.to_thread(extractor.extract_from_text, text_to_process)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

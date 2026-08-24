@@ -32,8 +32,16 @@ def _build_database_url() -> str:
 # Create database URL
 DATABASE_URL = _build_database_url()
 
-# Create engine
-engine = create_engine(DATABASE_URL, echo=False)
+# Create engine with persistent connection pool to eliminate SSL renegotiation latency
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 10}
+)
 
 # Create session
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -89,7 +97,7 @@ def _auto_migrate_vector_dimension():
 
             # 3. Dimension mismatch — resize column (drop + recreate, pgvector limitation)
             print(
-                f"[INFO] Auto-migrating embedding column: {current_dim}-dim → {TARGET_DIM}-dim "
+                f"[INFO] Auto-migrating embedding column: {current_dim}-dim -> {TARGET_DIM}-dim "
                 f"(BioLORD-2023-M upgrade). Existing vectors cleared."
             )
             conn.execute(
@@ -99,7 +107,7 @@ def _auto_migrate_vector_dimension():
                 text(f"ALTER TABLE document_embeddings ADD COLUMN embedding vector({TARGET_DIM})")
             )
             conn.commit()
-            print(f"[INFO] Embedding column upgraded to vector({TARGET_DIM}) ✓")
+            print(f"[INFO] Embedding column upgraded to vector({TARGET_DIM}) [OK]")
 
     except Exception as e:
         # Non-fatal — log and continue. The app still works; embeddings just won't save.

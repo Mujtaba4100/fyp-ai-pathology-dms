@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.rag_service import RAGService
@@ -26,21 +26,21 @@ async def ask_chatbot(request: ChatRequest, db: Session = Depends(get_db)):
     Retrieves semantically relevant records first, then answers using Groq (Llama-3).
     """
     if not request.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty")
+        return {
+            "status": "error",
+            "answer": "Please ask a question about pathology reports or patient records.",
+            "source_documents": [],
+        }
 
     rag_service = RAGService()
 
-    # Format history into the standard openai/groq format
     formatted_history = []
     if request.conversation_history:
         for msg in request.conversation_history:
             formatted_history.append({"role": msg.role, "content": msg.content})
 
-    # --- Blocking: SentenceTransformer encode + pgvector search + Groq HTTP call ---
     result = await asyncio.to_thread(
         rag_service.answer_question, db, request.question, formatted_history
     )
-    if result["status"] == "error":
-        raise HTTPException(status_code=500, detail=result["message"])
 
     return result

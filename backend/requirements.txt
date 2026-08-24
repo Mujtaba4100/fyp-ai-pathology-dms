@@ -19,8 +19,7 @@ PyPDF2==3.0.1
 pytesseract==0.3.10
 pdf2image==1.16.3
 
-# Database: MS SQL Server (Vault Storage)
-pyodbc==5.0.1
+# Database: PostgreSQL + Vector Store (Search & Embeddings)
 sqlalchemy==2.0.23
 
 # Database: PostgreSQL + Vector Store (Search & Embeddings)

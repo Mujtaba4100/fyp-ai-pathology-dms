@@ -1,20 +1,52 @@
 import asyncio
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status
+from fastapi.responses import Response, FileResponse
 from app.security import get_current_user, require_role
 from app.schemas import FileUploadResponse
 from app.database import get_db
 from app.services.database_service import DatabaseService
+from app.models.database_models import Document
 from sqlalchemy.orm import Session
 import os
 import uuid
+import mimetypes
 from datetime import datetime
+
+import tempfile
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
-UPLOAD_FOLDER = "uploads"
-
-# Ensure upload folder exists
+# Portable temp directory for uploads cache (works on Windows, Linux, and HF Spaces Docker)
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(tempfile.gettempdir(), "aidatrix_uploads"))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+@router.get("/upload/file/{file_id}")
+async def view_uploaded_file(file_id: str, db: Session = Depends(get_db)):
+    """Stream and view the actual original uploaded document (PDF or image)"""
+    # 1. First check if file exists on disk
+    if os.path.exists(UPLOAD_FOLDER):
+        for fname in os.listdir(UPLOAD_FOLDER):
+            if fname.startswith(file_id):
+                local_path = os.path.join(UPLOAD_FOLDER, fname)
+                mime_type, _ = mimetypes.guess_type(local_path)
+                return FileResponse(
+                    local_path,
+                    media_type=mime_type or "application/octet-stream",
+                    headers={"Content-Disposition": f"inline; filename={fname}"}
+                )
+
+    # 2. Fallback to PostgreSQL binary vault
+    doc = db.query(Document).filter(Document.file_id == file_id).first()
+    if doc and doc.file_data:
+        mime_type = doc.file_type or mimetypes.guess_type(doc.filename)[0] or "application/octet-stream"
+        return Response(
+            content=doc.file_data,
+            media_type=mime_type,
+            headers={"Content-Disposition": f"inline; filename={doc.filename}"}
+        )
+
+    raise HTTPException(status_code=404, detail="Original document file not found")
 
 
 @router.post("/upload/", response_model=FileUploadResponse)
@@ -151,19 +183,54 @@ async def update_report(
     }
 
 
-@router.delete("/report/{report_id}")
-async def delete_report(report_id: int, current_user=Depends(require_role("admin"))):
+@router.delete("/upload/document/{file_id}")
+async def delete_document(
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("admin", "lab_tech")),
+):
     """
-    Delete a report
+    Delete a document, its extracted reports, and associated vector embeddings (SRS Use Case 11)
+    Maintains database referential integrity without orphaned vectors.
+    """
+    from app.models.database_models import PathologyReport, DocumentEmbedding
 
-    Allowed: Admin only
-    Denied: Doctors and Lab Techs
-    """
+    deleted_items = []
+
+    # 1. Delete extracted pathology report
+    report = db.query(PathologyReport).filter(PathologyReport.document_id == file_id).first()
+    if report:
+        db.delete(report)
+        deleted_items.append("pathology_report")
+
+    # 2. Delete vector embeddings
+    emb = db.query(DocumentEmbedding).filter(DocumentEmbedding.document_id == file_id).first()
+    if emb:
+        db.delete(emb)
+        deleted_items.append("vector_embedding")
+
+    # 3. Delete document record
+    doc = db.query(Document).filter(Document.file_id == file_id).first()
+    if doc:
+        db.delete(doc)
+        deleted_items.append("document_record")
+
+    db.commit()
+
+    # 4. Remove local file from disk if present
+    if os.path.exists(UPLOAD_FOLDER):
+        for fname in os.listdir(UPLOAD_FOLDER):
+            if fname.startswith(file_id):
+                try:
+                    os.remove(os.path.join(UPLOAD_FOLDER, fname))
+                    deleted_items.append("disk_file")
+                except Exception:
+                    pass
+
     return {
-        "report_id": report_id,
-        "deleted_by": current_user.username,
-        "role": current_user.role,
-        "message": "Report deleted (implementation in Phase 2)",
+        "status": "success",
+        "message": f"Document {file_id} and all related EMR artifacts deleted successfully",
+        "deleted_components": deleted_items,
     }
 
 

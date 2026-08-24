@@ -118,31 +118,42 @@ Extract and return as JSON:"""
 
         prompt = self.get_extraction_prompt(clean_text)
 
-        response = self.groq_client.chat.completions.create(
-            model=self.groq_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0,
-            max_tokens=2000,
-        )
+        # High-throughput candidate models
+        candidate_models = [self.groq_model, "groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b", "openai/gpt-oss-120b"]
+        last_err = None
 
-        response_text = response.choices[0].message.content or ""
-        extracted_data = json.loads(self._strip_code_fences(response_text))
+        for model_name in candidate_models:
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0,
+                    max_tokens=4096,
+                )
 
-        return {
-            "status": "success",
-            "message": "Extraction successful using Groq",
-            "data": extracted_data,
-            "cost_estimate": "$0.000000 (Evaluations/Free Tier/Low Cost)",
-        }
+                response_text = response.choices[0].message.content or ""
+                extracted_data = json.loads(self._strip_code_fences(response_text))
+
+                return {
+                    "status": "success",
+                    "message": f"Extraction successful using open-source {model_name}",
+                    "data": extracted_data,
+                    "cost_estimate": "$0.000000 (Open-Source)",
+                }
+            except Exception as err:
+                last_err = err
+                continue
+
+        raise last_err or Exception("Extraction failed across candidate models")
 
     def extract_from_text(self, clean_text: str) -> dict:
-        """Extract medical information from cleaned text using Groq"""
+        """Extract medical information from cleaned text using open-source Llama-3.3"""
         try:
             return self._extract_with_groq(clean_text)
 
@@ -150,78 +161,6 @@ Extract and return as JSON:"""
             return {
                 "status": "json_error",
                 "message": "Could not parse LLM response as JSON",
-                "error": str(e),
-                "data": None,
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e), "data": None}
-
-    def extract_from_image_vision(self, file_path: str) -> dict:
-        """Extract medical information directly from image using Groq Llama 4 Scout Vision"""
-        import os
-
-        if not self.groq_client:
-            return {
-                "status": "error",
-                "message": "Groq client not configured or API key missing",
-                "data": None,
-            }
-
-        try:
-            # 1. Encode image to base64
-            with open(file_path, "rb") as image_file:
-                base64_image = base64.b64encode(image_file.read()).decode("utf-8")
-
-            # Determine mime type from file extension
-            ext = os.path.splitext(file_path)[1].lower().lstrip(".")
-            mime_type = (
-                f"image/{ext}"
-                if ext in ["png", "jpg", "jpeg", "webp"]
-                else "image/jpeg"
-            )
-
-            # 2. Build extraction prompt
-            prompt = self.get_vision_extraction_prompt()
-
-            # 3. Call Groq Llama 4 Maverick Vision API (replaces decommissioned llama-3.2-11b-vision-preview)
-            response = self.groq_client.chat.completions.create(
-                model="meta-llama/llama-4-maverick-17b-128e-instruct",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{base64_image}"
-                                },
-                            },
-                        ],
-                    },
-                ],
-                temperature=0,
-                max_tokens=2000,
-            )
-
-            response_text = response.choices[0].message.content or ""
-            extracted_data = json.loads(self._strip_code_fences(response_text))
-
-            return {
-                "status": "success",
-                "message": "Extraction successful using Groq Llama-4 Scout Vision",
-                "data": extracted_data,
-                "cost_estimate": "$0.000000 (Evaluations/Free Tier/Low Cost)",
-            }
-
-        except json.JSONDecodeError as e:
-            return {
-                "status": "json_error",
-                "message": "Could not parse Vision LLM response as JSON",
                 "error": str(e),
                 "data": None,
             }

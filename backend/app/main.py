@@ -18,6 +18,7 @@ from app.routes import (
     embeddings,
     search,
     chatbot,
+    analytics,
 )
 
 app = FastAPI(
@@ -26,10 +27,10 @@ app = FastAPI(
     debug=settings.DEBUG,
 )
 
-# Allow frontend (React/Flutter) to call this API
+# Allow frontend (React/Flutter/Mobile) to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex="https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,6 +45,7 @@ app.include_router(llm_extraction.router)
 app.include_router(embeddings.router)
 app.include_router(search.router)
 app.include_router(chatbot.router)
+app.include_router(analytics.router)
 
 
 @app.get("/", response_model=MessageResponse)
