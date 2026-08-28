@@ -47,12 +47,40 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Public registration as Administrator is not permitted. Only existing Administrators can assign this role in User Management.",
         )
-    if requested_role not in ["doctor", "lab_tech"]:
-        requested_role = "doctor"
+    username = user_data.username.strip()
+    email = user_data.email.strip()
+    password = user_data.password
+
+    # Validate Username
+    if len(username) < 3 or len(username) > 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username must be between 3 and 20 characters.",
+        )
+    import re
+    if not re.match(r"^[a-zA-Z0-9_]+$", username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username can only contain alphanumeric characters and underscores.",
+        )
+
+    # Validate Email
+    if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a valid email address.",
+        )
+
+    # Validate Password length
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long.",
+        )
 
     existing_user = (
         db.query(User)
-        .filter((User.username == user_data.username) | (User.email == user_data.email))
+        .filter((User.username == username) | (User.email == email))
         .first()
     )
     if existing_user:
@@ -61,10 +89,10 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             detail="Username or email already exists",
         )
 
-    hashed_pw = get_password_hash(user_data.password)
+    hashed_pw = get_password_hash(password)
     new_user = User(
-        username=user_data.username,
-        email=user_data.email,
+        username=username,
+        email=email,
         password_hash=hashed_pw,
         role=requested_role,
     )

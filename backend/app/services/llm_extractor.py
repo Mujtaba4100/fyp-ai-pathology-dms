@@ -60,37 +60,39 @@ Strict Rules:
 
     @staticmethod
     def get_extraction_prompt(clean_text: str) -> str:
-        """Generate extraction prompt for medical text"""
-        return f"""You are a medical data extraction expert. Extract medical information from the following pathology report text.
-        
-Return the extracted data as JSON with the following structure:
+        """Generate extraction prompt with medical pathology domain validation"""
+        return f"""You are an expert clinical medical intelligence validator and data extractor.
+Your task is to:
+1. FIRST, determine if the provided text represents a valid medical pathology or clinical diagnostic laboratory report (such as Complete Blood Count, Liver Function Test, Lipid Profile, Renal Function, Urine Routine, Histopathology, etc.).
+2. If the text is NOT a medical pathology report (for example: a photo of nature/landscape, food, selfie, retail invoice, vehicle paper, random text, or gibberish), you MUST set "is_valid_medical_report": false.
+3. If it IS a medical pathology report, set "is_valid_medical_report": true and extract the structured clinical fields.
+
+Return ONLY valid JSON with the following structure:
 {{
+    "is_valid_medical_report": true/false,
+    "rejection_reason": "Provide reason if false, or null if true",
     "patient_id": "extracted or null",
     "patient_name": "extracted or null",
-    "test_type": "type of pathology test",
+    "test_type": "type of pathology test (e.g. Complete Blood Count, Lipid Profile)",
     "test_date": "date of test",
     "findings": [
         {{
-            "test_name": "name of test",
+            "test_name": "name of test (e.g. Hemoglobin, WBC, Platelets, Total Cholesterol)",
             "value": "measured value",
             "unit": "unit of measurement",
-            "reference_range": "normal range",
+            "reference_range": "normal biological reference range",
             "is_abnormal": true/false
         }}
     ],
-    "diagnosis": "primary diagnosis if mentioned on the report. If not explicitly written, provide a brief AI clinical diagnosis or assessment based on the extracted findings (e.g., identify if findings indicate anemia, mild thrombocytopenia, or normal results).",
-    "recommendations": "recommendations or notes if mentioned. If not explicitly written, provide brief recommendations based on any abnormal values (e.g., 'Consult physician for abnormal hemoglobin levels' or 'None needed').",
-    "summary": "a brief clinical summary of findings. Highlight any values that are out of range and explain their potential clinical meaning."
+    "diagnosis": "primary diagnosis or brief AI clinical evaluation based strictly on findings",
+    "recommendations": "medical advice or recommendations",
+    "summary": "brief summary of findings highlighting abnormal biomarkers"
 }}
 
 Strict Rules:
-1. Return ONLY valid JSON, no other text.
-2. If a field is not found, use null.
-3. is_abnormal must be true if the extracted value lies outside the extracted reference range.
-4. Extract values, reference ranges, and units EXACTLY as they appear in the text.
-5. DO NOT use standard biological or physiological reference ranges from your general knowledge base to "correct", override, or substitute the actual values, units, or ranges written in the report. Always extract exactly what is in the provided text, even if it looks misplaced, unusual, or clinically incorrect.
-6. Pay close attention to column layout and spacing to avoid merging separate numbers from adjacent columns (e.g., do not combine a value column and a reference range column into a single number).
-7. Do not hallucinate or guess any data.
+1. Return ONLY valid JSON, no markdown outside JSON fences.
+2. If the text has no medical/laboratory content, set "is_valid_medical_report": false.
+3. Extract values, reference ranges, and units EXACTLY as they appear in the text. Do not hallucinate or guess.
 
 Medical Report Text:
 {clean_text}
@@ -116,10 +118,18 @@ Extract and return as JSON:"""
                 "data": None,
             }
 
+        if not clean_text or len(clean_text.strip()) < 15:
+            return {
+                "status": "error",
+                "error_type": "INVALID_DOCUMENT_TYPE",
+                "message": "Invalid Document: No readable pathology or laboratory text detected in this image. Please upload a clear diagnostic lab report.",
+                "data": None,
+            }
+
         prompt = self.get_extraction_prompt(clean_text)
 
-        # High-throughput candidate models
-        candidate_models = [self.groq_model, "groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b", "openai/gpt-oss-120b"]
+        # High-throughput candidate models with Llama-3.3 primary
+        candidate_models = ["llama-3.3-70b-versatile", self.groq_model, "groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
         last_err = None
 
         for model_name in candidate_models:
@@ -139,6 +149,16 @@ Extract and return as JSON:"""
 
                 response_text = response.choices[0].message.content or ""
                 extracted_data = json.loads(self._strip_code_fences(response_text))
+
+                # Check medical validation guardrail
+                if extracted_data.get("is_valid_medical_report") is False:
+                    reason = extracted_data.get("rejection_reason") or "The uploaded document is not a recognized medical pathology report."
+                    return {
+                        "status": "error",
+                        "error_type": "INVALID_DOCUMENT_TYPE",
+                        "message": f"Invalid Document: {reason}",
+                        "data": None,
+                    }
 
                 return {
                     "status": "success",

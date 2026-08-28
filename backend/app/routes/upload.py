@@ -135,6 +135,77 @@ async def upload_file(
         )
 
 
+@router.post("/upload/batch")
+async def upload_batch(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("doctor", "lab_tech", "admin")),
+):
+    """Upload up to 5 pathology reports in batch"""
+    if len(files) > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Batch limit exceeded: Maximum 5 files allowed per batch.",
+        )
+
+    results = []
+    for file in files:
+        try:
+            file_id = str(uuid.uuid4())
+            file_extension = os.path.splitext(file.filename)[1].lower()
+            if file_extension not in [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff"]:
+                results.append({
+                    "file_id": "",
+                    "filename": file.filename,
+                    "status": "error",
+                    "message": f"Unsupported format {file_extension}",
+                })
+                continue
+
+            contents = await file.read()
+            file_size = len(contents)
+
+            # Save to temporary local cache
+            saved_filename = f"{file_id}_{file.filename}"
+            local_path = os.path.join(UPLOAD_FOLDER, saved_filename)
+            with open(local_path, "wb") as f:
+                f.write(contents)
+
+            # Save to PostgreSQL binary vault
+            file_type = (file.content_type or "").strip() or file_extension.lstrip(".")
+            await asyncio.to_thread(
+                DatabaseService.save_document,
+                db,
+                file_id,
+                file.filename,
+                file_size,
+                file_type,
+                contents,
+            )
+
+            results.append({
+                "file_id": file_id,
+                "filename": file.filename,
+                "file_size": file_size,
+                "status": "success",
+                "message": "File uploaded successfully",
+            })
+        except Exception as e:
+            results.append({
+                "file_id": "",
+                "filename": file.filename,
+                "status": "error",
+                "message": str(e),
+            })
+
+    return {
+        "status": "success",
+        "total": len(files),
+        "successful": len([r for r in results if r["status"] == "success"]),
+        "files": results,
+    }
+
+
 @router.get("/upload/list", response_model=dict)
 async def list_files(current_user=Depends(require_role("doctor", "lab_tech", "admin"))):
     """List all uploaded files
@@ -181,6 +252,27 @@ async def update_report(
         "role": current_user.role,
         "message": "Report updated (implementation in Phase 2)",
     }
+
+
+@router.get("/upload/file/{file_id}")
+async def get_raw_file(file_id: str, db: Session = Depends(get_db)):
+    """Stream raw file from PostgreSQL vault or disk storage."""
+    from fastapi.responses import Response
+    doc = db.query(Document).filter(Document.file_id == file_id).first()
+    if doc and doc.file_data:
+        ftype = (doc.file_type or "").lower()
+        content_type = "image/jpeg" if ftype in ["jpg", "jpeg", "image/jpeg", "image/jpg"] else "application/pdf" if ftype in ["pdf", "application/pdf"] else "image/png" if ftype in ["png", "image/png"] else "application/octet-stream"
+        return Response(content=doc.file_data, media_type=content_type)
+
+    if os.path.exists(UPLOAD_FOLDER):
+        for fname in os.listdir(UPLOAD_FOLDER):
+            if fname.startswith(file_id):
+                file_path = os.path.join(UPLOAD_FOLDER, fname)
+                with open(file_path, "rb") as f:
+                    data = f.read()
+                return Response(content=data, media_type="image/jpeg")
+
+    raise HTTPException(status_code=404, detail="Document file not found in EMR vault")
 
 
 @router.delete("/upload/document/{file_id}")

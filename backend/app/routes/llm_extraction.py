@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.llm_extractor import LLMExtractor
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 import os
 
 from app.database import get_db
@@ -33,7 +33,11 @@ async def extract_medical_data(request: ExtractRequest, db: Session = Depends(ge
         text_to_process = request.cleaned_text or request.raw_text or ""
         # --- Blocking: Groq HTTP call ---
         result = await asyncio.to_thread(extractor.extract_from_text, text_to_process)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result.get("message", "Invalid medical report document"))
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -106,23 +110,23 @@ async def test_extraction():
 
 
 class FindingItem(BaseModel):
-    test_name: str
-    value: str
-    unit: str
-    reference_range: str
-    is_abnormal: bool
+    test_name: str = "Biomarker"
+    value: Any = ""
+    unit: Optional[str] = ""
+    reference_range: Optional[str] = ""
+    is_abnormal: Optional[bool] = False
 
 
 class ApproveSaveRequest(BaseModel):
     file_id: str
     patient_id: Optional[str] = None
     patient_name: Optional[str] = None
-    test_type: str
+    test_type: Optional[str] = "Pathology Report"
     test_date: Optional[str] = None
-    findings: List[FindingItem]
+    findings: List[FindingItem] = []
     diagnosis: Optional[str] = None
     recommendations: Optional[str] = None
-    summary: str
+    summary: Optional[str] = "Pathology report approved."
 
 
 @router.post("/approve-save")
@@ -177,3 +181,54 @@ async def approve_save(request: ApproveSaveRequest, db: Session = Depends(get_db
         raise HTTPException(
             status_code=500, detail=f"Failed to save approved report: {str(e)}"
         )
+
+
+class BatchApproveSaveRequest(BaseModel):
+    reports: List[ApproveSaveRequest]
+
+
+@router.post("/batch-save")
+async def batch_approve_save(request: BatchApproveSaveRequest, db: Session = Depends(get_db)):
+    """Commit multiple verified pathology reports to PostgreSQL EMR in batch"""
+    saved_ids = []
+    errors = []
+
+    for item in request.reports:
+        try:
+            extraction_data = item.dict()
+            report = await asyncio.to_thread(
+                DatabaseService.save_pathology_report,
+                db, item.file_id, extraction_data
+            )
+            saved_ids.append(report.id)
+
+            # Generate and index BioLORD embeddings
+            doc = await asyncio.to_thread(DatabaseService.get_document, db, item.file_id)
+            if doc:
+                text_to_embed = doc.cleaned_text or doc.raw_text or item.summary
+                if text_to_embed:
+                    try:
+                        from app.services.embedding_service import EmbeddingService
+                        embed_service = EmbeddingService()
+                        embed_res = await asyncio.to_thread(
+                            embed_service.generate_embedding, text_to_embed
+                        )
+                        if embed_res.get("status") == "success":
+                            await asyncio.to_thread(
+                                DatabaseService.save_embedding,
+                                db,
+                                item.file_id,
+                                embed_res["embedding"],
+                                text_to_embed[:500],
+                            )
+                    except Exception as emb_err:
+                        print(f"[WARN] Batch embedding skipped for {item.file_id}: {emb_err}")
+        except Exception as e:
+            errors.append({"file_id": item.file_id, "error": str(e)})
+
+    return {
+        "status": "success",
+        "saved_count": len(saved_ids),
+        "report_ids": saved_ids,
+        "errors": errors,
+    }
