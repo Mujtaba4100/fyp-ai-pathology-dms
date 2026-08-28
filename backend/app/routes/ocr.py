@@ -1,6 +1,10 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
-from app.services.ocr_service import OCRService
+#from app.services.ocr_tesseract_service import TesseractOCRService
+from app.services.ocr_deepseek_service import DeepSeekOCRService
+# from app.services.ocr_qwen_service import QwenOCRService
+# from app.services.ocr_gotocr_service import GotOCRService
+# from app.services.ocr_paddle_service import PaddleOCRService
 from app.schemas import OCRResponse
 from app.security import get_current_user
 from app.database import get_db
@@ -64,7 +68,7 @@ async def process_file_ocr(
             file_path = os.path.join(UPLOAD_FOLDER, file_found)
 
         # --- Blocking: Tesseract OCR (CPU-bound) ---
-        result = await asyncio.to_thread(OCRService.process_file, file_path)
+        result = await asyncio.to_thread(DeepSeekOCRService.process_file, file_path)
 
         # --- Blocking: PostgreSQL writes via SQLAlchemy ---
         def _persist_ocr():

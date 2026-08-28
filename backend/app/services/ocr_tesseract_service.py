@@ -8,8 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class OCRService:
-    """Service for OCR processing of images and PDFs"""
+class TesseractOCRService:
+    """Service for OCR processing of images and PDFs using Tesseract"""
 
     UPLOAD_FOLDER = "uploads"
     # Windows path for Tesseract - will use system PATH if not found
@@ -19,10 +19,10 @@ class OCRService:
     @staticmethod
     def _find_tesseract():
         """Find Tesseract installation"""
-        if os.path.exists(OCRService.TESSERACT_PATH):
-            return OCRService.TESSERACT_PATH
-        elif os.path.exists(OCRService.ALTERNATIVE_PATH):
-            return OCRService.ALTERNATIVE_PATH
+        if os.path.exists(TesseractOCRService.TESSERACT_PATH):
+            return TesseractOCRService.TESSERACT_PATH
+        elif os.path.exists(TesseractOCRService.ALTERNATIVE_PATH):
+            return TesseractOCRService.ALTERNATIVE_PATH
         else:
             # Try system PATH
             try:
@@ -56,13 +56,13 @@ class OCRService:
         """Extract text from image using Tesseract"""
         try:
             # Set tesseract path (Windows)
-            tesseract_path = OCRService._find_tesseract()
+            tesseract_path = TesseractOCRService._find_tesseract()
             if tesseract_path:
                 pytesseract.pytesseract.pytesseract_cmd = tesseract_path
 
             # Open and preprocess image
             image = Image.open(file_path)
-            image = OCRService._preprocess_image(image)
+            image = TesseractOCRService._preprocess_image(image)
 
             # Extract text using Tesseract OCR with PSM 6 (single uniform block of text)
             # This forces horizontal tabular reading rather than column splitting
@@ -113,7 +113,7 @@ class OCRService:
         """Extract text from PDF using Tesseract on each page"""
         try:
             # Set tesseract path (Windows)
-            tesseract_path = OCRService._find_tesseract()
+            tesseract_path = TesseractOCRService._find_tesseract()
             if tesseract_path:
                 pytesseract.pytesseract.pytesseract_cmd = tesseract_path
 
@@ -126,7 +126,7 @@ class OCRService:
             # Process each page
             for page_num, image in enumerate(images, 1):
                 # Preprocess page image
-                image = OCRService._preprocess_image(image)
+                image = TesseractOCRService._preprocess_image(image)
                 # Extract text from page with PSM 6 configuration
                 custom_config = "--oem 3 --psm 6"
                 page_text = pytesseract.image_to_string(image, config=custom_config)
@@ -176,9 +176,9 @@ class OCRService:
         file_extension = Path(file_path).suffix.lower()
 
         if file_extension == ".pdf":
-            return OCRService.process_pdf(file_path)
+            return TesseractOCRService.process_pdf(file_path)
         elif file_extension in [".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp"]:
-            return OCRService.process_image(file_path)
+            return TesseractOCRService.process_image(file_path)
         else:
             return {
                 "status": "unsupported",
