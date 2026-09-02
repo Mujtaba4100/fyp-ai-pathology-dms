@@ -30,7 +30,7 @@ app = FastAPI(
 # Allow frontend (React/Flutter/Mobile) to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",
+    allow_origins=["*"],  # Allows all origins including 'null' from file:// protocols
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
