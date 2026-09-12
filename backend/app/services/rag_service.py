@@ -4,25 +4,25 @@ from app.services.search_service import SearchService
 from app.models.database_models import PathologyReport
 
 try:
-    from groq import Groq
+    from huggingface_hub import InferenceClient
 except ImportError:
-    Groq = None
+    InferenceClient = None
 
 
 class RAGService:
     """RAG (Retrieval Augmented Generation) service for chatbot Q&A"""
 
     def __init__(self):
-        self.groq_client = (
-            Groq(api_key=settings.GROQ_API_KEY)
+        self.hf_client = (
+            InferenceClient(token=settings.HF_TOKEN)
             if (
-                Groq
-                and settings.GROQ_API_KEY
-                and settings.GROQ_API_KEY != "gsk_change_me_to_your_groq_key"
+                InferenceClient
+                and settings.HF_TOKEN
+                and settings.HF_TOKEN != "hf_your_hugging_face_token_here"
             )
             else None
         )
-        self.groq_model = settings.GROQ_MODEL
+        self.hf_model = settings.HF_MODEL
 
     @staticmethod
     def format_search_results(search_results: list) -> str:
@@ -47,13 +47,13 @@ class RAGService:
     def answer_question(
         self, db: Session, question: str, conversation_history: list = None
     ) -> dict:
-        """Answer user question using RAG and Groq"""
+        """Answer user question using RAG and Hugging Face"""
         try:
-            if not self.groq_client:
+            if not self.hf_client:
                 return {
                     "status": "error",
-                    "message": "Groq client not configured or API key is missing.",
-                    "answer": "Error: Groq client not configured. Please set GROQ_API_KEY in .env.",
+                    "message": "Hugging Face client not configured or API key is missing.",
+                    "answer": "Error: Hugging Face client not configured. Please set HF_TOKEN in .env.",
                     "source_documents": [],
                 }
 
@@ -166,32 +166,25 @@ STRICT DOMAIN SCOPE & GUARDRAILS:
             # Add current context and question
             messages.append({"role": "user", "content": user_message})
 
-            # 4. Request completions from Groq with model fallback
-            candidate_models = ["llama-3.3-70b-versatile", self.groq_model, "groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
-            last_err = None
+            # 4. Request completions from Hugging Face
+            try:
+                response = self.hf_client.chat_completion(
+                    model=self.hf_model,
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=1000,
+                )
 
-            for model_name in candidate_models:
-                try:
-                    response = self.groq_client.chat.completions.create(
-                        model=model_name,
-                        messages=messages,
-                        temperature=0.2,
-                        max_tokens=1000,
-                    )
+                answer = response.choices[0].message.content or ""
 
-                    answer = response.choices[0].message.content or ""
-
-                    return {
-                        "status": "success",
-                        "answer": answer.strip(),
-                        "source_documents": results_list,
-                        "total_sources": len(results_list),
-                    }
-                except Exception as err:
-                    last_err = err
-                    continue
-
-            raise last_err or Exception("RAG query failed across all candidate models")
+                return {
+                    "status": "success",
+                    "answer": answer.strip(),
+                    "source_documents": results_list,
+                    "total_sources": len(results_list),
+                }
+            except Exception as err:
+                raise Exception(f"RAG query failed: {str(err)}")
 
         except Exception as e:
             return {

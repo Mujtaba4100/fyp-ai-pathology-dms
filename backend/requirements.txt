@@ -27,7 +27,6 @@ psycopg2-binary==2.9.9
 pgvector==0.2.4
 
 #llm
-groq
 sentence-transformers>=3.0.0
 
 # Testing Framework

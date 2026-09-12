@@ -31,7 +31,7 @@ async def extract_medical_data(request: ExtractRequest, db: Session = Depends(ge
     try:
         extractor = LLMExtractor()
         text_to_process = request.cleaned_text or request.raw_text or ""
-        # --- Blocking: Groq HTTP call ---
+        # --- Blocking: Hugging Face HTTP call ---
         result = await asyncio.to_thread(extractor.extract_from_text, text_to_process)
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message", "Invalid medical report document"))
@@ -47,7 +47,7 @@ async def process_hybrid(request: HybridExtractRequest):
     """
     Hybrid OCR/Vision parser.
     If OCR text is short (< 200 characters) or force_vision is True, it automatically
-    falls back to Groq Llama Vision. Otherwise, runs the standard text-based LLM extractor.
+    falls back to Hugging Face Vision. Otherwise, runs the standard text-based LLM extractor.
     """
     extractor = LLMExtractor()
 
@@ -63,7 +63,7 @@ async def process_hybrid(request: HybridExtractRequest):
 
             if file_found:
                 file_path = os.path.join(UPLOAD_FOLDER, file_found)
-                # --- Blocking: Groq Vision HTTP call ---
+                # --- Blocking: Hugging Face Vision HTTP call ---
                 result = await asyncio.to_thread(extractor.extract_from_image_vision, file_path)
                 return {
                     "status": result.get("status"),
@@ -73,7 +73,7 @@ async def process_hybrid(request: HybridExtractRequest):
                 }
 
         # 2. Default: Text LLM
-        # --- Blocking: Groq HTTP call ---
+        # --- Blocking: Hugging Face HTTP call ---
         result = await asyncio.to_thread(extractor.extract_from_text, request.ocr_text)
         return {
             "status": result.get("status"),
@@ -102,7 +102,7 @@ async def test_extraction():
     """
     try:
         extractor = LLMExtractor()
-        # --- Blocking: Groq HTTP call ---
+        # --- Blocking: Hugging Face HTTP call ---
         result = await asyncio.to_thread(extractor.extract_from_text, sample_text)
         return result
     except Exception as e:

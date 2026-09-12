@@ -3,25 +3,25 @@ import json
 import base64
 
 try:
-    from groq import Groq
+    from huggingface_hub import InferenceClient
 except ImportError:
-    Groq = None
+    InferenceClient = None
 
 
 class LLMExtractor:
-    """Service for extracting medical information using Groq (Llama-3)"""
+    """Service for extracting medical information using Hugging Face (Llama-3)"""
 
     def __init__(self):
-        self.groq_client = (
-            Groq(api_key=settings.GROQ_API_KEY)
+        self.hf_client = (
+            InferenceClient(token=settings.HF_TOKEN)
             if (
-                Groq
-                and settings.GROQ_API_KEY
-                and settings.GROQ_API_KEY != "gsk_change_me_to_your_groq_key"
+                InferenceClient
+                and settings.HF_TOKEN
+                and settings.HF_TOKEN != "hf_your_hugging_face_token_here"
             )
             else None
         )
-        self.groq_model = settings.GROQ_MODEL
+        self.hf_model = settings.HF_MODEL
 
     @staticmethod
     def get_vision_extraction_prompt() -> str:
@@ -110,11 +110,11 @@ Extract and return as JSON:"""
             response_text = response_text.split("```", 1)[1].split("```", 1)[0]
         return response_text.strip()
 
-    def _extract_with_groq(self, clean_text: str) -> dict:
-        if not self.groq_client:
+    def _extract_with_hf(self, clean_text: str) -> dict:
+        if not self.hf_client:
             return {
                 "status": "error",
-                "message": "Groq client not configured or API key missing",
+                "message": "Hugging Face client not configured or API key missing",
                 "data": None,
             }
 
@@ -128,54 +128,46 @@ Extract and return as JSON:"""
 
         prompt = self.get_extraction_prompt(clean_text)
 
-        # High-throughput candidate models with Llama-3.3 primary
-        candidate_models = ["llama-3.3-70b-versatile", self.groq_model, "groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
-        last_err = None
+        try:
+            response = self.hf_client.chat_completion(
+                model=self.hf_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+            )
 
-        for model_name in candidate_models:
-            try:
-                response = self.groq_client.chat.completions.create(
-                    model=model_name,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0,
-                    max_tokens=4096,
-                )
+            response_text = response.choices[0].message.content or ""
+            extracted_data = json.loads(self._strip_code_fences(response_text))
 
-                response_text = response.choices[0].message.content or ""
-                extracted_data = json.loads(self._strip_code_fences(response_text))
-
-                # Check medical validation guardrail
-                if extracted_data.get("is_valid_medical_report") is False:
-                    reason = extracted_data.get("rejection_reason") or "The uploaded document is not a recognized medical pathology report."
-                    return {
-                        "status": "error",
-                        "error_type": "INVALID_DOCUMENT_TYPE",
-                        "message": f"Invalid Document: {reason}",
-                        "data": None,
-                    }
-
+            # Check medical validation guardrail
+            if extracted_data.get("is_valid_medical_report") is False:
+                reason = extracted_data.get("rejection_reason") or "The uploaded document is not a recognized medical pathology report."
                 return {
-                    "status": "success",
-                    "message": f"Extraction successful using open-source {model_name}",
-                    "data": extracted_data,
-                    "cost_estimate": "$0.000000 (Open-Source)",
+                    "status": "error",
+                    "error_type": "INVALID_DOCUMENT_TYPE",
+                    "message": f"Invalid Document: {reason}",
+                    "data": None,
                 }
-            except Exception as err:
-                last_err = err
-                continue
 
-        raise last_err or Exception("Extraction failed across candidate models")
+            return {
+                "status": "success",
+                "message": f"Extraction successful using Hugging Face {self.hf_model}",
+                "data": extracted_data,
+                "cost_estimate": "$0.000000 (Open-Source)",
+            }
+        except Exception as err:
+            raise Exception(f"Extraction failed: {str(err)}")
 
     def extract_from_text(self, clean_text: str) -> dict:
         """Extract medical information from cleaned text using open-source Llama-3.3"""
         try:
-            return self._extract_with_groq(clean_text)
+            return self._extract_with_hf(clean_text)
 
         except json.JSONDecodeError as e:
             return {

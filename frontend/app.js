@@ -430,6 +430,19 @@ async function approveAndSaveReport() {
             btn.textContent = "Saved successfully ✓";
             btn.style.backgroundColor = "var(--success-green)";
             btn.disabled = true;
+            
+            // Auto-reset UI after 2.5 seconds
+            setTimeout(() => {
+                document.getElementById('extraction-placeholder').style.display = 'flex';
+                document.getElementById('extraction-results').style.display = 'none';
+                document.getElementById('preview-container').style.display = 'none';
+                document.getElementById('upload-progress').style.display = 'none';
+                
+                // Reset button for next time
+                btn.textContent = originalText;
+                btn.style.backgroundColor = "";
+                btn.disabled = false;
+            }, 2500);
         } else {
             btn.textContent = originalText;
             btn.disabled = false;

@@ -23,7 +23,7 @@ class ChatRequest(BaseModel):
 async def ask_chatbot(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Query the EMR Pathology Assistant.
-    Retrieves semantically relevant records first, then answers using Groq (Llama-3).
+    Retrieves semantically relevant records first, then answers using Hugging Face (Llama-3).
     """
     if not request.question.strip():
         return {

@@ -17,9 +17,9 @@ class Settings(BaseSettings):
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     )
 
-    # Groq Open-Source LLM Execution Engine
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "groq/compound-mini")
+    # Hugging Face Serverless Inference Engine
+    HF_TOKEN: str = os.getenv("HF_TOKEN", "")
+    HF_MODEL: str = os.getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
 
     # PostgreSQL (for text extraction + embeddings)
     # If provided, this is the primary connection string (e.g., Neon hosted Postgres).
