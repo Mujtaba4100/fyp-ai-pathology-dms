@@ -2,27 +2,14 @@ from app.config import settings
 from sqlalchemy.orm import Session
 from app.services.search_service import SearchService
 from app.models.database_models import PathologyReport
-
-try:
-    from huggingface_hub import InferenceClient
-except ImportError:
-    InferenceClient = None
-
+import gc
 
 class RAGService:
-    """RAG (Retrieval Augmented Generation) service for chatbot Q&A"""
+    """RAG (Retrieval Augmented Generation) service for chatbot Q&A using local Transformers"""
 
     def __init__(self):
-        self.hf_client = (
-            InferenceClient(token=settings.HF_TOKEN)
-            if (
-                InferenceClient
-                and settings.HF_TOKEN
-                and settings.HF_TOKEN != "hf_your_hugging_face_token_here"
-            )
-            else None
-        )
-        self.hf_model = settings.HF_MODEL
+        self.local_model = settings.LOCAL_LLM_MODEL
+        self.hf_token = settings.HF_TOKEN
 
     @staticmethod
     def format_search_results(search_results: list) -> str:
@@ -47,13 +34,13 @@ class RAGService:
     def answer_question(
         self, db: Session, question: str, conversation_history: list = None
     ) -> dict:
-        """Answer user question using RAG and Hugging Face"""
+        """Answer user question using RAG and Local LLM"""
         try:
-            if not self.hf_client:
+            if not self.local_model:
                 return {
                     "status": "error",
-                    "message": "Hugging Face client not configured or API key is missing.",
-                    "answer": "Error: Hugging Face client not configured. Please set HF_TOKEN in .env.",
+                    "message": "Local LLM model not configured in .env",
+                    "answer": "Error: Local LLM model not configured. Please set LOCAL_LLM_MODEL in .env.",
                     "source_documents": [],
                 }
 
@@ -166,16 +153,29 @@ STRICT DOMAIN SCOPE & GUARDRAILS:
             # Add current context and question
             messages.append({"role": "user", "content": user_message})
 
-            # 4. Request completions from Hugging Face
+            # 4. Request completions from Local LLM
             try:
-                response = self.hf_client.chat_completion(
-                    model=self.hf_model,
-                    messages=messages,
-                    temperature=0.2,
-                    max_tokens=1000,
+                import torch
+                from transformers import pipeline
+
+                # Lazy load pipeline
+                pipe = pipeline(
+                    "text-generation", 
+                    model=self.local_model, 
+                    token=self.hf_token if self.hf_token else None,
+                    device_map="auto",
+                    torch_dtype=torch.float16
                 )
 
-                answer = response.choices[0].message.content or ""
+                # Generate output locally
+                response = pipe(messages, max_new_tokens=1000, temperature=0.2, do_sample=True)
+                answer = response[0]["generated_text"][-1]["content"] or ""
+
+                # Unload model and free VRAM
+                del pipe
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
 
                 return {
                     "status": "success",
@@ -184,7 +184,7 @@ STRICT DOMAIN SCOPE & GUARDRAILS:
                     "total_sources": len(results_list),
                 }
             except Exception as err:
-                raise Exception(f"RAG query failed: {str(err)}")
+                raise Exception(f"Local RAG query failed: {str(err)}")
 
         except Exception as e:
             return {

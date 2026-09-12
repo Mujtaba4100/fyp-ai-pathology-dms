@@ -17,9 +17,12 @@ class Settings(BaseSettings):
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     )
 
-    # Hugging Face Serverless Inference Engine
+    # Local LLM Config (Transformers)
+    # The supervisor requested meta-llama/Llama-3.3-70B-Instruct for on-prem servers.
+    # Note: 70B model requires ~140GB VRAM. Ensure deployment server has sufficient hardware.
+    LOCAL_LLM_MODEL: str = os.getenv("LOCAL_LLM_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    # Using HF_TOKEN just to authenticate if the model is gated, but inference is local
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
-    HF_MODEL: str = os.getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
 
     # PostgreSQL (for text extraction + embeddings)
     # If provided, this is the primary connection string (e.g., Neon hosted Postgres).

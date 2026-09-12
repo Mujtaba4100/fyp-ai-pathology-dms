@@ -1,27 +1,14 @@
 from app.config import settings
 import json
 import base64
-
-try:
-    from huggingface_hub import InferenceClient
-except ImportError:
-    InferenceClient = None
-
+import gc
 
 class LLMExtractor:
-    """Service for extracting medical information using Hugging Face (Llama-3)"""
+    """Service for extracting medical information using local Transformers LLM"""
 
     def __init__(self):
-        self.hf_client = (
-            InferenceClient(token=settings.HF_TOKEN)
-            if (
-                InferenceClient
-                and settings.HF_TOKEN
-                and settings.HF_TOKEN != "hf_your_hugging_face_token_here"
-            )
-            else None
-        )
-        self.hf_model = settings.HF_MODEL
+        self.local_model = settings.LOCAL_LLM_MODEL
+        self.hf_token = settings.HF_TOKEN
 
     @staticmethod
     def get_vision_extraction_prompt() -> str:
@@ -110,11 +97,11 @@ Extract and return as JSON:"""
             response_text = response_text.split("```", 1)[1].split("```", 1)[0]
         return response_text.strip()
 
-    def _extract_with_hf(self, clean_text: str) -> dict:
-        if not self.hf_client:
+    def _extract_with_local_llm(self, clean_text: str) -> dict:
+        if not self.local_model:
             return {
                 "status": "error",
-                "message": "Hugging Face client not configured or API key missing",
+                "message": "Local LLM model not configured in .env",
                 "data": None,
             }
 
@@ -128,21 +115,41 @@ Extract and return as JSON:"""
 
         prompt = self.get_extraction_prompt(clean_text)
 
+        # Lazy load the transformers pipeline to avoid memory hogs when not extracting
         try:
-            response = self.hf_client.chat_completion(
-                model=self.hf_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.1,
-                max_tokens=4096,
+            import torch
+            from transformers import pipeline
+
+            # Load pipeline (downloads model if not cached). Using device_map="auto" to use GPU if available.
+            pipe = pipeline(
+                "text-generation", 
+                model=self.local_model, 
+                token=self.hf_token if self.hf_token else None,
+                device_map="auto",
+                torch_dtype=torch.float16
             )
 
-            response_text = response.choices[0].message.content or ""
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a medical data extraction expert. Return ONLY valid JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            # Generate output locally
+            response = pipe(messages, max_new_tokens=4096, temperature=0.1, do_sample=True)
+            
+            # Extract generated content
+            # Pipeline with 'messages' returns a list of dicts. We extract the generated assistant content.
+            response_text = response[0]["generated_text"][-1]["content"] or ""
+
+            # Unload model and free VRAM
+            del pipe
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+
             extracted_data = json.loads(self._strip_code_fences(response_text))
 
             # Check medical validation guardrail
@@ -157,17 +164,17 @@ Extract and return as JSON:"""
 
             return {
                 "status": "success",
-                "message": f"Extraction successful using Hugging Face {self.hf_model}",
+                "message": f"Extraction successful using Local Model {self.local_model}",
                 "data": extracted_data,
-                "cost_estimate": "$0.000000 (Open-Source)",
+                "cost_estimate": "$0.000000 (Local Open-Source)",
             }
         except Exception as err:
-            raise Exception(f"Extraction failed: {str(err)}")
+            raise Exception(f"Local Extraction failed: {str(err)}")
 
     def extract_from_text(self, clean_text: str) -> dict:
-        """Extract medical information from cleaned text using open-source Llama-3.3"""
+        """Extract medical information from cleaned text using local model"""
         try:
-            return self._extract_with_hf(clean_text)
+            return self._extract_with_local_llm(clean_text)
 
         except json.JSONDecodeError as e:
             return {
